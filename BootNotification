@@ -1,0 +1,111 @@
+const OCPPValidator = require('./ocpp-validator');
+const ChargingStationStorage = require('./charging-station-storage');
+const OCPPStorage = require('./ocpp-storage');
+const OCPPUtils = require('./ocpp-utils');
+const OCPPCommon = require('./ocpp-common');
+const Logging = require('./logging');
+const LoggingHelper = require('./logging-helper');
+const Constants = require('./constants');
+
+const ServerAction = {
+  OCPP_BOOT_NOTIFICATION: 'OcppBootNotification'
+};
+
+const MODULE_NAME = 'OcppService';
+
+async function handleBootNotification(headers, bootNotification) {
+  try {
+    console.log("handleBootNotification in OCPP Service------->", headers);
+    const { tenant } = headers;
+    let { chargingStation } = headers;
+    OCPPValidator.getInstance().validateBootNotification(headers, bootNotification);
+
+    // Get heartbeat interval
+    const heartbeatIntervalSecs = getHeartbeatInterval(headers.ocppProtocol);
+
+    // Check Charging Station
+    if (!chargingStation) {
+      // Create Charging Station
+      chargingStation = await createChargingStationFromBootNotification(tenant, bootNotification.chargingStation, headers);
+    } else {
+      // Validate Charging Station
+      checkChargingStationIsIdenticalFromBootNotification(chargingStation, bootNotification.chargingStation);
+    }
+
+    // Enrich Charging Station
+    await enrichChargingStationFromBootNotification(tenant, chargingStation, headers, bootNotification);
+
+    // Apply template
+    await OCPPUtils.checkAndApplyTemplateToChargingStation(tenant, chargingStation, false);
+
+    // Save Charging Station
+    await ChargingStationStorage.saveChargingStation(tenant, chargingStation);
+
+    // Save Boot Notification
+    await OCPPStorage.saveBootNotification(tenant, bootNotification);
+
+    // Notify
+    notifyBootNotification(tenant, chargingStation);
+
+    // Request OCPP configuration
+    setTimeout(async () => {
+      await OCPPCommon.requestAndSaveChargingStationOcppParameters(tenant, chargingStation);
+    }, Constants.DELAY_CHANGE_CONFIGURATION_EXECUTION_MILLIS);
+
+    await Logging.logInfo({
+      ...LoggingHelper.getChargingStationProperties(chargingStation),
+      tenantID: tenant.id,
+      action: ServerAction.OCPP_BOOT_NOTIFICATION,
+      module: MODULE_NAME, method: 'handleBootNotification',
+      message: 'Boot Notification has been accepted',
+      detailedMessages: { bootNotification }
+    });
+
+    // Accept
+    return {
+      currentTime: bootNotification.timestamp.toISOString(),
+      status: 'Accepted',
+      interval: heartbeatIntervalSecs
+    };
+  } catch (error) {
+    addChargingStationToException(error, headers.chargeBoxIdentity);
+    await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_BOOT_NOTIFICATION, error, { bootNotification });
+
+    // Reject
+    return {
+      status: 'Rejected',
+      currentTime: bootNotification.timestamp ? bootNotification.timestamp.toISOString() : new Date().toISOString(),
+      interval: Constants.BOOT_NOTIFICATION_WAIT_TIME,
+      statusInfo: { /* Provide additional status information if needed */}
+    };
+  }
+}
+
+// Helper functions
+function getHeartbeatInterval(ocppProtocol) {
+  // Implementation to get heartbeat interval based on OCPP protocol
+}
+
+async function createChargingStationFromBootNotification(tenant, chargingStation, headers) {
+  // Implementation to create a charging station from boot notification
+}
+
+function checkChargingStationIsIdenticalFromBootNotification(chargingStation, bootNotificationChargingStation) {
+  // Implementation to check if charging station is identical to boot notification
+}
+
+async function enrichChargingStationFromBootNotification(tenant, chargingStation, headers, bootNotification) {
+  // Implementation to enrich charging station from boot notification
+}
+
+function notifyBootNotification(tenant, chargingStation) {
+  // Implementation to notify boot notification
+}
+
+function addChargingStationToException(error, chargeBoxIdentity) {
+  // Implementation to add charging station to exception
+}
+
+module.exports = {
+  handleBootNotification
+};
