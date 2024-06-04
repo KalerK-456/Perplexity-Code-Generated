@@ -1,0 +1,58 @@
+import { OCPPHeader, OCPPStatusNotificationRequestExtended201, OCPPStatusNotificationResponse } from './ocpp201';
+import OCPPValidator from './ocpp-validator';
+import ChargingStationStorage from './charging-station-storage';
+import OCPPStorage from './ocpp-storage';
+import OCPPUtils from './ocpp-utils';
+import OCPPCommon from './ocpp-common';
+import Logging from './logging';
+import LoggingHelper from './logging-helper';
+import Constants from './constants';
+
+const ServerAction = {
+  OCPP_STATUS_NOTIFICATION: OCPPConnectorStatusEnumType.AVAILABLE
+};
+
+const MODULE_NAME = 'OcppService';
+
+async function handleStatusNotification(headers: OCPPHeader, statusNotification: OCPPStatusNotificationRequestExtended201): Promise<OCPPStatusNotificationResponse> {
+  try {
+    console.log("handleStatusNotification in OCPP Service------->", headers);
+    const { tenant } = headers;
+    let { chargingStation } = headers;
+    OCPPValidator.getInstance().validateStatusNotification(statusNotification);
+
+    // Get the header infos
+    const { chargingStation: chargingStationFromHeaders, tenant: tenantFromHeaders } = headers;
+
+    // Check props
+    if (statusNotification.connectorId <= 0) {
+      await Logging.logInfo({
+        ...LoggingHelper.getChargingStationProperties(chargingStationFromHeaders),
+        tenantID: tenantFromHeaders.id,
+        action: ServerAction.OCPP_STATUS_NOTIFICATION,
+        module: MODULE_NAME, method: 'handleStatusNotification',
+        message: `Connector ID '0' > ${this.buildStatusNotification(statusNotification)}, will be ignored (Connector ID = '0')`,
+        detailedMessages: { statusNotification }
+      });
+    } else {
+      // Update only the given Connector ID
+      await this.processConnectorFromStatusNotification(tenantFromHeaders, chargingStationFromHeaders, statusNotification);
+    }
+    return {};
+  } catch (error) {
+    this.addChargingStationToException(error, headers.chargeBoxIdentity);
+    await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_STATUS_NOTIFICATION, error, { statusNotification });
+    return {};
+  }
+}
+
+// Helper functions
+function processConnectorFromStatusNotification(tenant: any, chargingStation: any, statusNotification: OCPPStatusNotificationRequestExtended201): Promise<void> {
+  // Implementation to process connector from status notification
+}
+
+function addChargingStationToException(error: any, chargeBoxIdentity: string): void {
+  // Implementation to add charging station to exception
+}
+
+export default handleStatusNotification;
