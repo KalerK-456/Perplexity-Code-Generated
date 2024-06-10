@@ -1,0 +1,155 @@
+const OCPPValidator = require('./ocpp-validator');
+const ChargingStationStorage = require('./charging-station-storage');
+const OCPPStorage = require('./ocpp-storage');
+const OCPPUtils = require('./ocpp-utils');
+const OCPPCommon = require('./ocpp-common');
+const Logging = require('./logging');
+const LoggingHelper = require('./logging-helper');
+const Constants = require('./constants');
+
+const ServerAction = {
+  OCPP_AUTHORIZE: 'OcppAuthorize'
+};
+
+const MODULE_NAME = 'OcppService';
+
+async function handleAuthorize(headers: OCPPHeader, authorize: OCPPAuthorizeRequest201): Promise<OCPPAuthorizeResponse201> {
+  try {
+    console.log("handleAuthorize in OCPP Service------->", headers);
+    const { tenant } = headers;
+    let { chargingStation } = headers;
+    OCPPValidator.getInstance().validateAuthorize(authorize);
+
+    // Get the header infos
+    const { user } = await CommonUtilsService.isAuthorizedOnChargingStation(tenant, chargingStation, authorize.idToken.idToken, ServerAction.OCPP_AUTHORIZE, Action.AUTHORIZE);
+
+    // Check Billing Prerequisites
+    await OCPPUtils.checkBillingPrerequisites(tenant, ServerAction.OCPP_AUTHORIZE, chargingStation, user);
+
+    // Enrich
+    this.enrichAuthorize(user, chargingStation, headers, authorize);
+
+    // Save
+    await OCPPStorage.saveAuthorize(tenant, authorize);
+
+    await Logging.logInfo({
+      ...LoggingHelper.getChargingStationProperties(chargingStation),
+      tenantID: tenant.id,
+      module: MODULE_NAME, method: 'handleAuthorize',
+      action: ServerAction.OCPP_AUTHORIZE, user: (authorize.user ? authorize.user : null),
+      message: `User has been authorized with RFID Card '${authorize.idToken.idToken}'`,
+      detailedMessages: { authorize }
+    });
+
+    // Accepted
+    return {
+      certificateStatus: OCPPAuthorizeCertificateStatusEnumType.ACCEPTED,
+      idTokenInfo: {
+        status: OCPPAuthorizationStatusEnumType.ACCEPTED,
+        cacheExpiryDateTime: authorize.idToken.cacheExpiryDateTime,
+        chargingPriority: authorize.idToken.chargingPriority,
+        expiryDate: authorize.idToken.expiryDate,
+        parentIdTag: authorize.idToken.parentIdTag
+      }
+    };
+  } catch (error) {
+    this.addChargingStationToException(error, headers.chargeBoxIdentity);
+    await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_AUTHORIZE, error, { authorize });
+
+    // Rejected
+    return {
+      certificateStatus: OCPPAuthorizeCertificateStatusEnumType.INVALID,
+      idTokenInfo: {
+        status: OCPPAuthorizationStatusEnumType.INVALID,
+        cacheExpiryDateTime: null,
+        chargingPriority: null,
+        expiryDate: null,
+        parentIdTag: null
+      }
+    };
+  }
+}
+
+// New function to handle start button authorization
+async function handleStartButtonAuthorization(headers: OCPPHeader): Promise<OCPPAuthorizeResponse201> {
+  try {
+    console.log("handleStartButtonAuthorization in OCPP Service------->", headers);
+    const { tenant, chargingStation } = headers;
+
+    // Validate the start button press (this is a placeholder, actual implementation may vary)
+    if (!chargingStation.startButtonPressed) {
+      throw new Error('Start button not pressed');
+    }
+
+    // Check Billing Prerequisites
+    await OCPPUtils.checkBillingPrerequisites(tenant, ServerAction.OCPP_AUTHORIZE, chargingStation, null);
+
+    await Logging.logInfo({
+      ...LoggingHelper.getChargingStationProperties(chargingStation),
+      tenantID: tenant.id,
+      module: MODULE_NAME, method: 'handleStartButtonAuthorization',
+      action: ServerAction.OCPP_AUTHORIZE,
+      message: `User has been authorized using the start button`,
+      detailedMessages: { chargingStation }
+    });
+
+    // Accepted
+    return {
+      certificateStatus: OCPPAuthorizeCertificateStatusEnumType.ACCEPTED,
+      idTokenInfo: {
+        status: OCPPAuthorizationStatusEnumType.ACCEPTED,
+        cacheExpiryDateTime: null,
+        chargingPriority: null,
+        expiryDate: null,
+        parentIdTag: null
+      }
+    };
+  } catch (error) {
+    this.addChargingStationToException(error, headers.chargeBoxIdentity);
+    await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_AUTHORIZE, error, {});
+
+    // Rejected
+    return {
+      certificateStatus: OCPPAuthorizeCertificateStatusEnumType.INVALID,
+      idTokenInfo: {
+        status: OCPPAuthorizationStatusEnumType.INVALID,
+        cacheExpiryDateTime: null,
+        chargingPriority: null,
+        expiryDate: null,
+        parentIdTag: null
+      }
+    };
+  }
+}
+
+// Helper functions
+function getHeartbeatInterval(ocppProtocol: string): number {
+  // Implementation to get heartbeat interval based on OCPP protocol
+  return 0; // Placeholder
+}
+
+async function createChargingStationFromAuthorize(tenant: any, chargingStation: OCPPChargingStationType, headers: OCPPHeader): Promise<OCPPChargingStationType> {
+  // Implementation to create a charging station from authorize
+  return chargingStation; // Placeholder
+}
+
+function checkChargingStationIsIdenticalFromAuthorize(chargingStation: OCPPChargingStationType, authorizeChargingStation: OCPPChargingStationType): void {
+  // Implementation to check if charging station is identical to authorize
+}
+
+async function enrichChargingStationFromAuthorize(tenant: any, chargingStation: OCPPChargingStationType, headers: OCPPHeader, authorize: OCPPAuthorizeRequest201): Promise<void> {
+  // Implementation to enrich charging station from authorize
+}
+
+function notifyAuthorize(tenant: any, chargingStation: OCPPChargingStationType): void {
+  // Implementation to notify authorize
+}
+
+function addChargingStationToException(error: any, chargeBoxIdentity: string): void {
+  // Implementation to add charging station to exception
+}
+
+module.exports = {
+  handleAuthorize,
+  handleStartButtonAuthorization
+};
