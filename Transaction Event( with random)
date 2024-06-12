@@ -1,0 +1,179 @@
+// Import necessary types and enums from the OCPP 2.0.1 specification
+import {
+  OCPPTransactionEventEnumType,
+  OCPPTriggerReasonEnumType,
+  OCPPChargingStateEnumType,
+  OCPPReasonEnumType,
+  OCPPReadingContextEnumType,
+  OCPPMeasurandEnumType,
+  OCPPPhaseEnumType,
+  OCPPLocationEnumType,
+  OCPPMessageFormatEnumType,
+  OCPPAuthorizationStatusEnumType,
+  OCPPTransactionEventRequest201,
+  OCPPTransactionEventRequestExtended201,
+  OCPPTransactionEventResponse201,
+  OCPPTransactionType,
+  OCPPMeterValueType,
+  OCPPSampledValueType,
+  OCPPIdTokenInfoType,
+  OCPPMessageContentType,
+  OCPPSignedMeterValueType,
+  OCPPUnitOfMeasureType,
+  OCPPIdTokenType,
+  OCPPEVSEType
+} from './OCPPTypes'; // Assuming these types are defined in OCPPTypes.ts
+
+// Define the TransactionEventResponse function
+function TransactionEventResponse(request: OCPPTransactionEventRequestExtended201): OCPPTransactionEventResponse201 {
+  // Validate the request object
+  if (!request || !request.transactionInfo || !request.eventType || !request.timestamp || !request.triggerReason) {
+    throw new Error('Invalid request object');
+  }
+
+  // Initialize the response object
+  let response: OCPPTransactionEventResponse201 = {
+    totalCost: 0,
+    chargingPriority: 0,
+    idTokenInfo: undefined,
+    updatedPersonalMessage: ''
+  };
+
+  // Process the transaction event based on the event type
+  switch (request.eventType) {
+    case OCPPTransactionEventEnumType.STARTED:
+      response = handleTransactionStarted(request);
+      break;
+    case OCPPTransactionEventEnumType.UPDATED:
+      response = handleTransactionUpdated(request);
+      break;
+    case OCPPTransactionEventEnumType.ENDED:
+      response = handleTransactionEnded(request);
+      break;
+    default:
+      throw new Error('Unsupported event type');
+  }
+
+  return response;
+}
+
+// Handle transaction started event
+function handleTransactionStarted(request: OCPPTransactionEventRequestExtended201): OCPPTransactionEventResponse201 {
+  const idTokenInfo: OCPPIdTokenInfoType = generateIdTokenInfo(request, 'Transaction Started');
+  return {
+    totalCost: 0,
+    chargingPriority: 1,
+    idTokenInfo: idTokenInfo,
+    updatedPersonalMessage: 'Transaction has started successfully'
+  };
+}
+
+// Handle transaction updated event
+function handleTransactionUpdated(request: OCPPTransactionEventRequestExtended201): OCPPTransactionEventResponse201 {
+  const idTokenInfo: OCPPIdTokenInfoType = generateIdTokenInfo(request, 'Transaction Updated');
+  return {
+    totalCost: calculateTotalCost(request),
+    chargingPriority: 1,
+    idTokenInfo: idTokenInfo,
+    updatedPersonalMessage: 'Transaction has been updated successfully'
+  };
+}
+
+// Handle transaction ended event
+function handleTransactionEnded(request: OCPPTransactionEventRequestExtended201): OCPPTransactionEventResponse201 {
+  const idTokenInfo: OCPPIdTokenInfoType = generateIdTokenInfo(request, 'Transaction Ended');
+  return {
+    totalCost: calculateTotalCost(request),
+    chargingPriority: 1,
+    idTokenInfo: idTokenInfo,
+    updatedPersonalMessage: 'Transaction has ended successfully'
+  };
+}
+
+// Function to generate IdTokenInfo
+function generateIdTokenInfo(request: OCPPTransactionEventRequestExtended201, message: string): OCPPIdTokenInfoType {
+  return {
+    status: OCPPAuthorizationStatusEnumType.ACCEPTED,
+    cacheExpiryDateTime: new Date(),
+    chargingPriority: 1,
+    language1: 'en',
+    evseId: [request.evse?.evseId || 1],
+    language2: 'en',
+    groupIdToken: request.idToken,
+    personalMessage: {
+      content: message,
+      language: 'en',
+      format: OCPPMessageFormatEnumType.UTF8
+    }
+  };
+}
+
+// Function to dynamically calculate total cost
+function calculateTotalCost(request: OCPPTransactionEventRequestExtended201): number {
+  const ratePerUnit = 0.15; // Example rate per unit of energy
+  const timeSpentCharging = request.transactionInfo?.timeSpentCharging || 0;
+  return timeSpentCharging * ratePerUnit;
+}
+
+// Function to generate a unique transaction ID
+function generateTransactionId(): string {
+  return 'TX-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+}
+
+// Function to generate a random time spent charging
+function generateTimeSpentCharging(): number {
+  return Math.floor(Math.random() * 120); // Random time between 0 and 120 minutes
+}
+
+// Function to generate a random chargeBoxID
+function generateChargeBoxID(): string {
+  return 'CB-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+}
+
+// Function to generate a random tagID
+function generateTagID(): string {
+  return 'TAG-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+}
+
+// Function to generate a random userID
+function generateUserID(): string {
+  return 'USER-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+}
+
+// Function to generate a random siteAreaID
+function generateSiteAreaID(): string {
+  return 'AREA-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+}
+
+// Function to generate a random siteID
+function generateSiteID(): string {
+  return 'SITE-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+}
+
+// Function to generate a random companyID
+function generateCompanyID(): string {
+  return 'COMP-' + Math.random().toString(36).substr(2, 9).toUpperCase();
+}
+
+// Example usage
+const exampleRequest: OCPPTransactionEventRequestExtended201 = {
+  eventType: OCPPTransactionEventEnumType.STARTED,
+  timestamp: new Date().toISOString(),
+  triggerReason: OCPPTriggerReasonEnumType.REMOTE_START,
+  seqNo: 0,
+  offline: false,
+  transactionInfo: {
+    transactionId: generateTransactionId(),
+    timeSpentCharging: generateTimeSpentCharging()
+  },
+  chargeBoxID: generateChargeBoxID(),
+  tagID: generateTagID(),
+  timezone: 'UTC',
+  userID: generateUserID(),
+  siteAreaID: generateSiteAreaID(),
+  siteID: generateSiteID(),
+  companyID: generateCompanyID()
+};
+
+const response = TransactionEventResponse(exampleRequest);
+console.log(response);
