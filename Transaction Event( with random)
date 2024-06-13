@@ -1,37 +1,137 @@
-// Import necessary types and enums from the OCPP 2.0.1 specification
+// Import necessary types and interfaces
 import {
   OCPPTransactionEventEnumType,
   OCPPTriggerReasonEnumType,
+  OCPPTransactionType,
+  OCPPIdTokenType,
+  OCPPEVSEType,
+  OCPPMeterValueType,
   OCPPChargingStateEnumType,
   OCPPReasonEnumType,
-  OCPPReadingContextEnumType,
-  OCPPMeasurandEnumType,
-  OCPPPhaseEnumType,
-  OCPPLocationEnumType,
-  OCPPMessageFormatEnumType,
-  OCPPAuthorizationStatusEnumType,
-  OCPPTransactionEventRequest201,
   OCPPTransactionEventRequestExtended201,
   OCPPTransactionEventResponse201,
-  OCPPTransactionType,
-  OCPPMeterValueType,
-  OCPPSampledValueType,
   OCPPIdTokenInfoType,
-  OCPPMessageContentType,
-  OCPPSignedMeterValueType,
-  OCPPUnitOfMeasureType,
-  OCPPIdTokenType,
-  OCPPEVSEType
-} from './OCPPTypes'; // Assuming these types are defined in OCPPTypes.ts
+  OCPPMessageFormatEnumType,
+  OCPPAuthorizationStatusEnumType
+} from './OCPPTypes';
 
-// Define the TransactionEventResponse function
-function TransactionEventResponse(request: OCPPTransactionEventRequestExtended201): OCPPTransactionEventResponse201 {
-  // Validate the request object
-  if (!request || !request.transactionInfo || !request.eventType || !request.timestamp || !request.triggerReason) {
-    throw new Error('Invalid request object');
+// Define the class for transaction event request
+class OCPPTransactionEventRequestExtended201 {
+  eventType: OCPPTransactionEventEnumType;
+  timestamp: string;
+  triggerReason: OCPPTriggerReasonEnumType;
+  seqNo: number;
+  offline?: number;
+  numberOfPhasesUsed?: number;
+  cableMaxCurrent?: number;
+  reservationId?: number;
+  transactionInfo: OCPPTransactionType;
+  idToken?: OCPPIdTokenType;
+  evse?: OCPPEVSEType;
+  meterValue?: OCPPMeterValueType[];
+  chargeBoxID: string;
+  tagID: string;
+  timezone: string;
+  userID: string;
+  siteAreaID: string;
+  siteID: string;
+  companyID: string;
+
+  constructor(data: any) {
+    this.eventType = data.eventType;
+    this.timestamp = data.timestamp;
+    this.triggerReason = data.triggerReason;
+    this.seqNo = data.seqNo;
+    this.offline = data.offline;
+    this.numberOfPhasesUsed = data.numberOfPhasesUsed;
+    this.cableMaxCurrent = data.cableMaxCurrent;
+    this.reservationId = data.reservationId;
+    this.transactionInfo = data.transactionInfo;
+    this.idToken = data.idToken;
+    this.evse = data.evse;
+    this.meterValue = data.meterValue;
+    this.chargeBoxID = data.chargeBoxID;
+    this.tagID = data.tagID;
+    this.timezone = data.timezone;
+    this.userID = data.userID;
+    this.siteAreaID = data.siteAreaID;
+    this.siteID = data.siteID;
+    this.companyID = data.companyID;
   }
+}
 
-  // Initialize the response object
+// Define the function to handle meter values
+async function handleMeterValues(headers: any, meterValues: any): Promise<void> {
+  try {
+    const { chargingStation, tenant } = headers;
+    await validateMeterValues(tenant.id, chargingStation, meterValues);
+    const normalizedMeterValues = normalizeMeterValues(chargingStation, meterValues);
+    filterMeterValuesOnSpecificChargingStations(tenant, chargingStation, normalizedMeterValues);
+
+    if (isEmptyArray(normalizedMeterValues.values)) {
+      logDebug({
+        ...getChargingStationProperties(chargingStation),
+        tenantID: tenant.id,
+        module: 'MODULE_NAME',
+        method: 'handleMeterValues',
+        action: 'OCPP_METER_VALUES',
+        message: 'No relevant Meter Values to save',
+        detailedMessages: { meterValues }
+      });
+      return;
+    }
+
+    const transaction = await getTransactionFromMeterValues(tenant, chargingStation, headers, meterValues);
+    await saveMeterValues(tenant, normalizedMeterValues);
+    updateTransactionWithMeterValues(chargingStation, transaction, normalizedMeterValues.values);
+    const consumptions = await createConsumptionsFromMeterValues(tenant, chargingStation, transaction, normalizedMeterValues.values);
+    await processTransactionCar(tenant, transaction, chargingStation, consumptions[consumptions.length - 1], null, 'UPDATE');
+
+    for (const consumption of consumptions) {
+      updateTransactionWithConsumption(chargingStation, transaction, consumption);
+      if (consumption.toPrice) {
+        await processUpdateTransaction(tenant, transaction, chargingStation, consumption, transaction.user);
+        await processUpdateTransaction(tenant, transaction, transaction.user);
+        await saveConsumption(tenant, consumption);
+      }
+    }
+
+    if (!transaction.phasesUsed && checkIfPhasesProvidedInTransactionInProgress(transaction) && transaction.numberOfMeterValues >= 1) {
+      transaction.phasesUsed = getUsedPhasesInTransactionInProgress(chargingStation, transaction);
+    }
+
+    await processUpdateTransaction(tenant, transaction, chargingStation, chargingStation.siteArea, transaction.user, 'OCPP_METER_VALUES');
+    await saveTransaction(tenant, transaction);
+    await updateChargingStationConnectorRuntimeDataWithTransaction(tenant, chargingStation, transaction);
+    await saveChargingStation(tenant, chargingStation);
+    await checkNotificationEndOfCharge(tenant, chargingStation, transaction);
+
+    if (transaction.numberOfMeterValues === 1 && transaction.phasesUsed) {
+      await triggerSmartCharging(tenant, chargingStation.siteArea);
+    }
+
+    logInfo({
+      ...getChargingStationProperties(chargingStation),
+      tenantID: tenant.id,
+      action: 'OCPP_METER_VALUES',
+      user: transaction.userID,
+      module: 'MODULE_NAME',
+      method: 'handleMeterValues',
+      message: `${buildConnectorInfo(meterValues.connectorId, meterValues.transactionId)} MeterValue have been saved`,
+      detailedMessages: { normalizedMeterValues }
+    });
+  } catch (error) {
+    addChargingStationToException(error, headers.chargeBoxIdentity);
+    logActionExceptionMessage(headers.tenantID, 'OCPP_METER_VALUES', error, { meterValues });
+  }
+}
+
+// Define the consolidated function
+async function TransactionEventResponse(headers: any, data: any): Promise<OCPPTransactionEventResponse201> {
+  const transactionEventRequest = new OCPPTransactionEventRequestExtended201(data);
+  await handleMeterValues(headers, transactionEventRequest.meterValue);
+
+  // Process the transaction event based on the event type
   let response: OCPPTransactionEventResponse201 = {
     totalCost: 0,
     chargingPriority: 0,
@@ -39,16 +139,15 @@ function TransactionEventResponse(request: OCPPTransactionEventRequestExtended20
     updatedPersonalMessage: ''
   };
 
-  // Process the transaction event based on the event type
-  switch (request.eventType) {
+  switch (transactionEventRequest.eventType) {
     case OCPPTransactionEventEnumType.STARTED:
-      response = handleTransactionStarted(request);
+      response = handleTransactionStarted(transactionEventRequest);
       break;
     case OCPPTransactionEventEnumType.UPDATED:
-      response = handleTransactionUpdated(request);
+      response = handleTransactionUpdated(transactionEventRequest);
       break;
     case OCPPTransactionEventEnumType.ENDED:
-      response = handleTransactionEnded(request);
+      response = handleTransactionEnded(transactionEventRequest);
       break;
     default:
       throw new Error('Unsupported event type');
@@ -115,65 +214,30 @@ function calculateTotalCost(request: OCPPTransactionEventRequestExtended201): nu
   return timeSpentCharging * ratePerUnit;
 }
 
-// Function to generate a unique transaction ID
-function generateTransactionId(): string {
-  return 'TX-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-}
-
-// Function to generate a random time spent charging
-function generateTimeSpentCharging(): number {
-  return Math.floor(Math.random() * 120); // Random time between 0 and 120 minutes
-}
-
-// Function to generate a random chargeBoxID
-function generateChargeBoxID(): string {
-  return 'CB-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-}
-
-// Function to generate a random tagID
-function generateTagID(): string {
-  return 'TAG-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-}
-
-// Function to generate a random userID
-function generateUserID(): string {
-  return 'USER-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-}
-
-// Function to generate a random siteAreaID
-function generateSiteAreaID(): string {
-  return 'AREA-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-}
-
-// Function to generate a random siteID
-function generateSiteID(): string {
-  return 'SITE-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-}
-
-// Function to generate a random companyID
-function generateCompanyID(): string {
-  return 'COMP-' + Math.random().toString(36).substr(2, 9).toUpperCase();
-}
-
-// Example usage
-const exampleRequest: OCPPTransactionEventRequestExtended201 = {
-  eventType: OCPPTransactionEventEnumType.STARTED,
-  timestamp: new Date().toISOString(),
-  triggerReason: OCPPTriggerReasonEnumType.REMOTE_START,
-  seqNo: 0,
-  offline: false,
-  transactionInfo: {
-    transactionId: generateTransactionId(),
-    timeSpentCharging: generateTimeSpentCharging()
-  },
-  chargeBoxID: generateChargeBoxID(),
-  tagID: generateTagID(),
-  timezone: 'UTC',
-  userID: generateUserID(),
-  siteAreaID: generateSiteAreaID(),
-  siteID: generateSiteID(),
-  companyID: generateCompanyID()
-};
-
-const response = TransactionEventResponse(exampleRequest);
-console.log(response);
+// Helper functions (placeholders for actual implementations)
+function validateMeterValues(tenantId: string, chargingStation: any, meterValues: any): Promise<void> { /* ... */ }
+function normalizeMeterValues(chargingStation: any, meterValues: any): any { /* ... */ }
+function filterMeterValuesOnSpecificChargingStations(tenant: any, chargingStation: any, normalizedMeterValues: any): void { /* ... */ }
+function isEmptyArray(array: any[]): boolean { /* ... */ }
+function logDebug(log: any): void { /* ... */ }
+function getTransactionFromMeterValues(tenant: any, chargingStation: any, headers: any, meterValues: any): Promise<any> { /* ... */ }
+function saveMeterValues(tenant: any, normalizedMeterValues: any): Promise<void> { /* ... */ }
+function updateTransactionWithMeterValues(chargingStation: any, transaction: any, values: any): void { /* ... */ }
+function createConsumptionsFromMeterValues(tenant: any, chargingStation: any, transaction: any, values: any): Promise<any[]> { /* ... */ }
+function processTransactionCar(tenant: any, transaction: any, chargingStation: any, consumption: any, arg1: any, action: string): Promise<void> { /* ... */ }
+function updateTransactionWithConsumption(chargingStation: any, transaction: any, consumption: any): void { /* ... */ }
+function processUpdateTransaction(tenant: any, transaction: any, chargingStation: any, consumption: any, user: any): Promise<void> { /* ... */ }
+function saveConsumption(tenant: any, consumption: any): Promise<void> { /* ... */ }
+function checkIfPhasesProvidedInTransactionInProgress(transaction: any): boolean { /* ... */ }
+function getUsedPhasesInTransactionInProgress(chargingStation: any, transaction: any): any { /* ... */ }
+function processUpdateTransaction(tenant: any, transaction: any, chargingStation: any, siteArea: any, user: any, action: string): Promise<void> { /* ... */ }
+function saveTransaction(tenant: any, transaction: any): Promise<void> { /* ... */ }
+function updateChargingStationConnectorRuntimeDataWithTransaction(tenant: any, chargingStation: any, transaction: any): Promise<void> { /* ... */ }
+function saveChargingStation(tenant: any, chargingStation: any): Promise<void> { /* ... */ }
+function checkNotificationEndOfCharge(tenant: any, chargingStation: any, transaction: any): Promise<void> { /* ... */ }
+function triggerSmartCharging(tenant: any, siteArea: any): Promise<void> { /* ... */ }
+function logInfo(log: any): void { /* ... */ }
+function addChargingStationToException(error: any, chargeBoxIdentity: any): void { /* ... */ }
+function logActionExceptionMessage(tenantID: any, action: any, error: any, details: any): void { /* ... */ }
+function getChargingStationProperties(chargingStation: any): any { /* ... */ }
+function buildConnectorInfo(connectorId: any, transactionId: any): string { /* ... */ }
