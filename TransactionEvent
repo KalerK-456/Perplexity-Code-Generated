@@ -1,4 +1,208 @@
 public async handleTransactionEventResponse(headers: OCPPHeader, transactionEvent: TransactionEvent): Promise<OCPPTransactionEventResponse201> {
+export interface TransactionEvent {
+  eventType: OCPPTransactionEventEnumType;
+  timestamp: string;
+  triggerReason: OCPPTriggerReasonEnumType;
+  seqNo: number;
+  offline?: number;
+  numberOfPhasesUsed?: number;
+  cableMaxCurrent?: number;
+  reservationId?: number;
+  transactionInfo: OCPPTransactionType;
+  idToken?: OCPPIdTokenType;
+  evse?: OCPPEVSEType;
+  meterValue?: OCPPMeterValueType[];
+}
+
+export enum OCPPTransactionEventEnumType {
+  ENDED = 'Ended',
+  STARTED = 'Started',
+  UPDATED = 'Updated'
+}
+
+export enum OCPPTriggerReasonEnumType {
+  AUTHORIZED = 'Authorized',
+  CABLE_PLUGGED_IN = 'CablePluggedIn',
+  CHARGING_RATE_CHANGED = 'ChargingRateChanged',
+  CHARGING_STATE_CHANGED = 'ChargingStateChanged',
+  DEAUTHORIZED = 'Deauthorized',
+  ENERGY_LIMIT_REACHED = 'EnergyLimitReached',
+  EV_COMMUNICATION_LOST = 'EVCommunicationLost',
+  EV_CONNECT_TIMEOUT = 'EVConnectTimeout',
+  METER_VALUE_CLOCK = 'MeterValueClock',
+  METER_VALUE_PERIODIC = 'MeterValuePeriodic',
+  TIME_LIMIT_REACHED = 'TimeLimitReached',
+  TRIGGER = 'Trigger',
+  UNLOCK_COMMAND = 'UnlockCommand',
+  STOP_AUTHORIZED = 'StopAuthorized',
+  EV_DEPARTED = 'EVDeparted',
+  EV_DETECTED = 'EVDetected',
+  REMOTE_STOP = 'RemoteStop',
+  REMOTE_START = 'RemoteStart',
+  ABNORMAL_CONDITION = 'AbnormalCondition',
+  SIGNED_DATA_RECEIVED = 'SignedDataReceived',
+  RESET_COMMAND = 'ResetCommand'
+}
+
+export interface OCPPTransactionType {
+  transactionId: string;
+  chargingState?: OCPPChargingStateEnumType;
+  timeSpentCharging?: number;
+  stoppedReason?: OCPPReasonEnumType;
+  remoteStartId?: number;
+}
+
+export enum OCPPChargingStateEnumType {
+  CHARGING = 'Charging',
+  EV_CONNECTED = 'EVConnected',
+  SUSPENDED_EV = 'SuspendedEV',
+  SUSPENDED_EVSE = 'SuspendedEVSE',
+  IDLE = 'Idle'
+}
+
+export enum OCPPReasonEnumType {
+  DE_AUTHORIZED = 'DeAuthorized',
+  EMERGENCY_STOP = 'EmergencyStop',
+  EV_DISCONNECTED = 'EVDisconnected',
+  ENERGY_LIMIT_REACHED = 'EnergyLimitReached',
+  GROUND_FAULT = 'GroundFault',
+  IMMEDIATE_RESET = 'ImmediateReset',
+  LOCAL = 'Local',
+  LOCAL_OUT_OF_CREDIT = 'LocalOutOfCredit',
+  MASTER_PASS = 'MasterPass',
+  OTHER = 'Other',
+  OVERCURRENT_FAULT = 'OvercurrentFault',
+  POWER_LOSS = 'PowerLoss',
+  POWER_QUALITY = 'PowerQuality',
+  REBOOT = 'Reboot',
+  REMOTE = 'Remote',
+  SOC_LIMIT_REACHED = 'SOCLimitReached'
+}
+
+export interface OCPPMeterValueType {
+  timestamp: string;
+  sampledValue: OCPPSampledValueType[];
+}
+
+export interface OCPPSampledValueType {
+  value: number;
+  context?: OCPPReadingContextEnumType;
+  measurand?: OCPPMeasurandEnumType;
+  phase?: OCPPPhaseEnumType;
+  location?: OCPPLocationEnumType;
+  signedMeterValue?: OCPPSignedMeterValueType;
+  unitOfMeasure?: OCPPUnitOfMeasureType;
+}
+
+export enum OCPPReadingContextEnumType {
+  INTERRUPTION_BEGIN = 'Interruption.Begin',
+  INTERRUPTION_END = 'Interruption.End',
+  OTHER = 'Other',
+  SAMPLE_CLOCK = 'Sample.Clock',
+  SAMPLE_PERIODIC = 'Sample.Periodic',
+  TRANSACTION_BEGIN = 'Transaction.Begin',
+  TRANSACTION_END = 'Transaction.End',
+  TRIGGER = 'Trigger'
+}
+
+export enum OCPPMeasurandEnumType {
+  CURRENT_EXPORT = 'Current.Export',
+  CURRENT_IMPORT = 'Current.Import',
+  CURRENT_OFFERED = 'Current.Offered',
+  ENERGY_ACTIVE_EXPORT_REGISTER = 'Energy.Active.Export.Register',
+  ENERGY_ACTIVE_IMPORT_REGISTER = 'Energy.Active.Import.Register',
+  ENERGY_REACTIVE_EXPORT_REGISTER = 'Energy.Reactive.Export.Register',
+  ENERGY_REACTIVE_IMPORT_REGISTER = 'Energy.Reactive.Import.Register',
+  ENERGY_ACTIVE_EXPORT_INTERVAL = 'Energy.Active.Export.Interval',
+  ENERGY_ACTIVE_IMPORT_INTERVAL = 'Energy.Active.Import.Interval',
+  ENERGY_ACTIVE_NET = 'Energy.Active.Net',
+  ENERGY_REACTIVE_NET = 'Energy.Reactive.Net',
+  ENERGY_APPARENT_NET = 'Energy.Apparent.Net',
+  ENERGY_APPARENT_IMPORT = 'Energy.Apparent.Import',
+  ENERGY_APPARENT_EXPORT = 'Energy.Apparent.Export',
+  FREQUENCY = 'Frequency',
+  POWER_ACTIVE_EXPORT = 'Power.Active.Export',
+  POWER_ACTIVE_IMPORT = 'Power.Active.Import',
+  POWER_FACTOR = 'Power.Factor',
+  POWER_OFFERED = 'Power.Offered',
+  POWER_REACTIVE_EXPORT = 'Power.Reactive.Export',
+  POWER_REACTIVE_IMPORT = 'Power.Reactive.Import',
+  SOC = 'SoC',
+  VOLTAGE = 'Voltage'
+}
+
+export enum OCPPPhaseEnumType {
+  L1 = 'L1',
+  L2 = 'L2',
+  L3 = 'L3',
+  N = 'N',
+  L1_N = 'L1-N',
+  L2_N = 'L2-N',
+  L3_N = 'L3-N',
+  L1_L2 = 'L1-L2',
+  L2_L3 = 'L2-L3',
+  L3_L1 = 'L3-L1'
+}
+
+export enum OCPPLocationEnumType {
+  BODY = 'Body',
+  CABLE = 'Cable',
+  EV = 'EV',
+  INLET = 'Inlet',
+  OUTLET = 'Outlet'
+}
+
+export interface OCPPSignedMeterValueType {
+  signedMeterData: string;
+  signingMethod: string;
+  encodingMethod: string;
+  publicKey: string;
+}
+
+export interface OCPPUnitOfMeasureType {
+  unit?: string;
+  multiplier?: number;
+}
+
+export interface OCPPTransactionEventResponse201 {
+  totalCost?: number;
+  chargingPriority?: number;
+  idTokenInfo?: OCPPIdTokenInfoType;
+  updatedPersonalMessage?: string;
+}
+
+export interface OCPPIdTokenInfoType {
+  status: OCPPAuthorizationStatusEnumType;
+  cacheExpiryDateTime?: Date;
+  chargingPriority?: number;
+  language1?: string;
+  evseId?: number[];
+  language2?: string;
+  groupIdToken?: OCPPIdTokenType;
+  personalMessage?: OCPPMessageContentType;
+}
+
+export interface OCPPMessageContentType {
+  content: string;
+  language?: string;
+  format: OCPPMessageFormatEnumType;
+}
+
+export enum OCPPMessageFormatEnumType {
+  ASCII = 'ASCII',
+  HTML = 'HTML',
+  URI = 'URI',
+  UTF8 = 'UTF8'
+}
+
+export enum OCPPAuthorizationStatusEnumType {
+  ACCEPTED = 'Accepted',
+  BLOCKED = 'Blocked',
+  EXPIRED = 'Expired',
+  INVALID = 'Invalid',
+  CONCURRENT_TX = 'ConcurrentTx'
+}
+
   try {
     // Extract header information
     const { chargingStation, tenant } = headers;
