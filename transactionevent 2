@@ -1,0 +1,280 @@
+export async function handleTransactionEventResponse(headers: {
+  chargingStation: any;
+  tenant: any;
+  chargeBoxIdentity: string;
+}, transactionEvent: {
+  eventType: 'Ended' | 'Started' | 'Updated';
+  timestamp: string;
+  triggerReason: 'Authorized' | 'CablePluggedIn' | 'ChargingRateChanged' | 'ChargingStateChanged' | 'Deauthorized' | 'EnergyLimitReached' | 'EVCommunicationLost' | 'EVConnectTimeout' | 'MeterValueClock' | 'MeterValuePeriodic' | 'TimeLimitReached' | 'Trigger' | 'UnlockCommand' | 'StopAuthorized' | 'EVDeparted' | 'EVDetected' | 'RemoteStop' | 'RemoteStart' | 'AbnormalCondition' | 'SignedDataReceived' | 'ResetCommand';
+  seqNo: number;
+  offline?: number;
+  numberOfPhasesUsed?: number;
+  cableMaxCurrent?: number;
+  reservationId?: number;
+  transactionInfo: {
+    transactionId: string;
+    chargingState?: 'Charging' | 'EVConnected' | 'SuspendedEV' | 'SuspendedEVSE' | 'Idle';
+    timeSpentCharging?: number;
+    stoppedReason?: 'DeAuthorized' | 'EmergencyStop' | 'EVDisconnected' | 'EnergyLimitReached' | 'GroundFault' | 'ImmediateReset' | 'Local' | 'LocalOutOfCredit' | 'MasterPass' | 'Other' | 'OvercurrentFault' | 'PowerLoss' | 'PowerQuality' | 'Reboot' | 'Remote' | 'SOCLimitReached';
+    remoteStartId?: number;
+  };
+  idToken?: {
+    idToken: string;
+    type: 'Central' | 'Local';
+    additionalInfo?: {
+      type: string;
+      value: string;
+    }[];
+  };
+  evse?: {
+    id: number;
+    connectorId: number;
+  };
+  meterValue?: {
+    timestamp: string;
+    sampledValue: {
+      value: number;
+      context?: 'Interruption.Begin' | 'Interruption.End' | 'Other' | 'Sample.Clock' | 'Sample.Periodic' | 'Transaction.Begin' | 'Transaction.End' | 'Trigger';
+      measurand?: 'Current.Export' | 'Current.Import' | 'Current.Offered' | 'Energy.Active.Export.Register' | 'Energy.Active.Import.Register' | 'Energy.Reactive.Export.Register' | 'Energy.Reactive.Import.Register' | 'Energy.Active.Export.Interval' | 'Energy.Active.Import.Interval' | 'Energy.Active.Net' | 'Energy.Reactive.Net' | 'Energy.Apparent.Net' | 'Energy.Apparent.Import' | 'Energy.Apparent.Export' | 'Frequency' | 'Power.Active.Export' | 'Power.Active.Import' | 'Power.Factor' | 'Power.Offered' | 'Power.Reactive.Export' | 'Power.Reactive.Import' | 'SoC' | 'Voltage';
+      phase?: 'L1' | 'L2' | 'L3' | 'N' | 'L1-N' | 'L2-N' | 'L3-N' | 'L1-L2' | 'L2-L3' | 'L3-L1';
+      location?: 'Body' | 'Cable' | 'EV' | 'Inlet' | 'Outlet';
+      signedMeterValue?: {
+        signedMeterData: string;
+        signingMethod: string;
+        encodingMethod: string;
+        publicKey: string;
+      };
+      unitOfMeasure?: {
+        unit?: string;
+        multiplier?: number;
+      };
+    }[];
+  }[];
+}): Promise<{
+  totalCost?: number;
+  chargingPriority?: number;
+  idTokenInfo?: {
+    status: 'Accepted' | 'Blocked' | 'Expired' | 'Invalid' | 'ConcurrentTx';
+    cacheExpiryDateTime?: Date;
+    chargingPriority?: number;
+    language1?: string;
+    evseId?: number[];
+    language2?: string;
+    groupIdToken?: {
+      idToken: string;
+      type: 'Central' | 'Local';
+      additionalInfo?: {
+        type: string;
+        value: string;
+      }[];
+    };
+    personalMessage?: {
+      content: string;
+      language?: string;
+      format: 'ASCII' | 'HTML' | 'URI' | 'UTF8';
+    };
+  };
+  updatedPersonalMessage?: string;
+}> {
+  try {
+    // Extract header information
+    const { chargingStation, tenant } = headers;
+
+    // Validate the transaction event request
+    OCPPValidator.getInstance().validateTransactionEvent(transactionEvent);
+
+    // Process the transaction event
+    const transactionInfo = transactionEvent.transactionInfo;
+    const idToken = transactionEvent.idToken;
+    const evse = transactionEvent.evse;
+    const meterValues = transactionEvent.meterValue;
+
+    // Perform necessary operations based on eventType
+    switch (transactionEvent.eventType) {
+      case 'Started':
+        // Handle transaction start logic
+        await handleTransactionStarted(transactionEvent);
+        break;
+      case 'Updated':
+        // Handle transaction update logic
+        await handleTransactionUpdated(transactionEvent);
+        break;
+      case 'Ended':
+        // Handle transaction end logic
+        await handleTransactionEnded(transactionEvent);
+        break;
+      default:
+        throw new Error(`Unknown eventType: ${transactionEvent.eventType}`);
+    }
+
+    // Process MeterValues if present
+    if (meterValues) {
+      await processMeterValues(meterValues, transactionEvent.eventType);
+    }
+
+    // Log the transaction event
+    await Logging.logInfo({
+      ...LoggingHelper.getChargingStationProperties(chargingStation),
+      tenantID: tenant.id,
+      module: MODULE_NAME,
+      method: 'handleTransactionEventResponse',
+      action: ServerAction.OCPP_TRANSACTION_EVENT,
+      message: `Transaction event processed for transaction ID '${transactionInfo.transactionId}'`,
+      detailedMessages: { transactionEvent }
+    });
+
+    // Return response
+    return {
+      totalCost: 0, // Example value, replace with actual calculation
+      chargingPriority: 1, // Example value, replace with actual priority
+      idTokenInfo: {
+        status: 'Accepted'
+      }
+    };
+  } catch (error) {
+    // Handle errors
+    addChargingStationToException(error, headers.chargeBoxIdentity);
+    await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_TRANSACTION_EVENT, error, { transactionEvent });
+
+    // Return error response
+    return {
+      idTokenInfo: {
+        status: 'Invalid'
+      }
+    };
+  }
+
+  async function processMeterValues(meterValues: {
+    timestamp: string;
+    sampledValue: {
+      value: number;
+      context?: 'Interruption.Begin' | 'Interruption.End' | 'Other' | 'Sample.Clock' | 'Sample.Periodic' | 'Transaction.Begin' | 'Transaction.End' | 'Trigger';
+      measurand?: 'Current.Export' | 'Current.Import' | 'Current.Offered' | 'Energy.Active.Export.Register' | 'Energy.Active.Import.Register' | 'Energy.Reactive.Export.Register' | 'Energy.Reactive.Import.Register' | 'Energy.Active.Export.Interval' | 'Energy.Active.Import.Interval' | 'Energy.Active.Net' | 'Energy.Reactive.Net' | 'Energy.Apparent.Net' | 'Energy.Apparent.Import' | 'Energy.Apparent.Export' | 'Frequency' | 'Power.Active.Export' | 'Power.Active.Import' | 'Power.Factor' | 'Power.Offered' | 'Power.Reactive.Export' | 'Power.Reactive.Import' | 'SoC' | 'Voltage';
+      phase?: 'L1' | 'L2' | 'L3' | 'N' | 'L1-N' | 'L2-N' | 'L3-N' | 'L1-L2' | 'L2-L3' | 'L3-L1';
+      location?: 'Body' | 'Cable' | 'EV' | 'Inlet' | 'Outlet';
+      signedMeterValue?: {
+        signedMeterData: string;
+        signingMethod: string;
+        encodingMethod: string;
+        publicKey: string;
+      };
+      unitOfMeasure?: {
+        unit?: string;
+        multiplier?: number;
+      };
+    }[];
+  }[], eventType: 'Ended' | 'Started' | 'Updated'): Promise<void> {
+    for (const meterValue of meterValues) {
+      // Process each meter value based on the event type
+      switch (eventType) {
+        case 'Started':
+          // Handle MeterValues for transaction start
+          await handleMeterValuesForStart(meterValue);
+          break;
+        case 'Updated':
+          // Handle MeterValues for transaction update
+          await handleMeterValuesForUpdate(meterValue);
+          break;
+        case 'Ended':
+          // Handle MeterValues for transaction end
+          await handleMeterValuesForEnd(meterValue);
+          break;
+      }
+    }
+  }
+
+  async function handleMeterValuesForStart(meterValue: {
+    timestamp: string;
+    sampledValue: {
+      value: number;
+      context?: 'Interruption.Begin' | 'Interruption.End' | 'Other' | 'Sample.Clock' | 'Sample.Periodic' | 'Transaction.Begin' | 'Transaction.End' | 'Trigger';
+      measurand?: 'Current.Export' | 'Current.Import' | 'Current.Offered' | 'Energy.Active.Export.Register' | 'Energy.Active.Import.Register' | 'Energy.Reactive.Export.Register' | 'Energy.Reactive.Import.Register' | 'Energy.Active.Export.Interval' | 'Energy.Active.Import.Interval' | 'Energy.Active.Net' | 'Energy.Reactive.Net' | 'Energy.Apparent.Net' | 'Energy.Apparent.Import' | 'Energy.Apparent.Export' | 'Frequency' | 'Power.Active.Export' | 'Power.Active.Import' | 'Power.Factor' | 'Power.Offered' | 'Power.Reactive.Export' | 'Power.Reactive.Import' | 'SoC' | 'Voltage';
+      phase?: 'L1' | 'L2' | 'L3' | 'N' | 'L1-N' | 'L2-N' | 'L3-N' | 'L1-L2' | 'L2-L3' | 'L3-L1';
+      location?: 'Body' | 'Cable' | 'EV' | 'Inlet' | 'Outlet';
+      signedMeterValue?: {
+        signedMeterData: string;
+        signingMethod: string;
+        encodingMethod: string;
+        publicKey: string;
+      };
+      unitOfMeasure?: {
+        unit?: string;
+        multiplier?: number;
+      };
+    }[];
+  }): Promise<void> {
+    // Implement logic for handling MeterValues at the start of a transaction
+    // Process SampledDataTxStartedMeasurands
+    for (const sampledValue of meterValue.sampledValue) {
+      // Process each sampled value
+      // Example: Store the initial meter values, calculate energy consumption, etc.
+      console.log(`Processing started meter value: ${sampledValue.value}`);
+      // Add your specific logic here
+    }
+  }
+
+  async function handleMeterValuesForUpdate(meterValue: {
+    timestamp: string;
+    sampledValue: {
+      value: number;
+      context?: 'Interruption.Begin' | 'Interruption.End' | 'Other' | 'Sample.Clock' | 'Sample.Periodic' | 'Transaction.Begin' | 'Transaction.End' | 'Trigger';
+      measurand?: 'Current.Export' | 'Current.Import' | 'Current.Offered' | 'Energy.Active.Export.Register' | 'Energy.Active.Import.Register' | 'Energy.Reactive.Export.Register' | 'Energy.Reactive.Import.Register' | 'Energy.Active.Export.Interval' | 'Energy.Active.Import.Interval' | 'Energy.Active.Net' | 'Energy.Reactive.Net' | 'Energy.Apparent.Net' | 'Energy.Apparent.Import' | 'Energy.Apparent.Export' | 'Frequency' | 'Power.Active.Export' | 'Power.Active.Import' | 'Power.Factor' | 'Power.Offered' | 'Power.Reactive.Export' | 'Power.Reactive.Import' | 'SoC' | 'Voltage';
+      phase?: 'L1' | 'L2' | 'L3' | 'N' | 'L1-N' | 'L2-N' | 'L3-N' | 'L1-L2' | 'L2-L3' | 'L3-L1';
+      location?: 'Body' | 'Cable' | 'EV' | 'Inlet' | 'Outlet';
+      signedMeterValue?: {
+        signedMeterData: string;
+        signingMethod: string;
+        encodingMethod: string;
+        publicKey: string;
+      };
+      unitOfMeasure?: {
+        unit?: string;
+        multiplier?: number;
+      };
+    }[];
+  }): Promise<void> {
+    // Implement logic for handling MeterValues during a transaction update
+    // Process SampledDataTxUpdatedMeasurands
+    for (const sampledValue of meterValue.sampledValue) {
+      // Process each sampled value
+      // Example: Update energy consumption calculations, check for billing periods, etc.
+      console.log(`Processing updated meter value: ${sampledValue.value}`);
+      // Add your specific logic here
+    }
+  }
+
+  async function handleMeterValuesForEnd(meterValue: {
+    timestamp: string;
+    sampledValue: {
+      value: number;
+      context?: 'Interruption.Begin' | 'Interruption.End' | 'Other' | 'Sample.Clock' | 'Sample.Periodic' | 'Transaction.Begin' | 'Transaction.End' | 'Trigger';
+      measurand?: 'Current.Export' | 'Current.Import' | 'Current.Offered' | 'Energy.Active.Export.Register' | 'Energy.Active.Import.Register' | 'Energy.Reactive.Export.Register' | 'Energy.Reactive.Import.Register' | 'Energy.Active.Export.Interval' | 'Energy.Active.Import.Interval' | 'Energy.Active.Net' | 'Energy.Reactive.Net' | 'Energy.Apparent.Net' | 'Energy.Apparent.Import' | 'Energy.Apparent.Export' | 'Frequency' | 'Power.Active.Export' | 'Power.Active.Import' | 'Power.Factor' | 'Power.Offered' | 'Power.Reactive.Export' | 'Power.Reactive.Import' | 'SoC' | 'Voltage';
+      phase?: 'L1' | 'L2' | 'L3' | 'N' | 'L1-N' | 'L2-N' | 'L3-N' | 'L1-L2' | 'L2-L3' | 'L3-L1';
+      location?: 'Body' | 'Cable' | 'EV' | 'Inlet' | 'Outlet';
+      signedMeterValue?: {
+        signedMeterData: string;
+        signingMethod: string;
+        encodingMethod: string;
+        publicKey: string;
+      };
+      unitOfMeasure?: {
+        unit?: string;
+        multiplier?: number;
+      };
+    }[];
+  }): Promise<void> {
+    // Implement logic for handling MeterValues at the end of a transaction
+    // Process SampledDataTxEndedMeasurands and AlignedDataTxEndedMeasurands
+    for (const sampledValue of meterValue.sampledValue) {
+      // Process each sampled value
+      // Example: Finalize energy consumption calculations, generate billing information, update transaction records, etc.
+      console.log(`Processing ended meter value: ${sampledValue.value}`);
+      // Add your specific logic here
+    }
+  }
+
+  function addChargingStationToException(error: Error, chargeBoxIdentity: string): void {
+    // Implement logic to add charging station information to the exception
+    console.error(`Error for charging station ${chargeBoxIdentity}: ${error.message}`);
+  }
+}
