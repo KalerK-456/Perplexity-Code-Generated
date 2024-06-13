@@ -1,16 +1,3 @@
-import {
-  OCPPHeader,
-  OCPPTransactionEventRequestExtended201,
-  OCPPTransactionEventResponse201,
-  OCPPTransactionEventEnumType,
-  OCPPAuthorizationStatusEnumType,
-  OCPPValidator,
-  Logging,
-  LoggingHelper,
-  ServerAction,
-  MODULE_NAME
-} from './ocpp-types'; // Assuming these are imported from the relevant module
-
 public async handleTransactionEventResponse(headers: OCPPHeader, transactionEvent: OCPPTransactionEventRequestExtended201): Promise<OCPPTransactionEventResponse201> {
   try {
     // Extract header information
@@ -23,6 +10,7 @@ public async handleTransactionEventResponse(headers: OCPPHeader, transactionEven
     const transactionInfo = transactionEvent.transactionInfo;
     const idToken = transactionEvent.idToken;
     const evse = transactionEvent.evse;
+    const meterValues = transactionEvent.meterValue;
 
     // Perform necessary operations based on eventType
     switch (transactionEvent.eventType) {
@@ -40,6 +28,11 @@ public async handleTransactionEventResponse(headers: OCPPHeader, transactionEven
         break;
       default:
         throw new Error(`Unknown eventType: ${transactionEvent.eventType}`);
+    }
+
+    // Process MeterValues if present
+    if (meterValues) {
+      await this.processMeterValues(meterValues, transactionEvent.eventType);
     }
 
     // Log the transaction event
@@ -75,17 +68,35 @@ public async handleTransactionEventResponse(headers: OCPPHeader, transactionEven
   }
 }
 
-private async handleTransactionStarted(transactionEvent: OCPPTransactionEventRequestExtended201): Promise<void> {
-  // Implement logic for handling transaction start
-  // This may include updating the database, notifying other systems, etc.
+private async processMeterValues(meterValues: OCPPMeterValueType[], eventType: OCPPTransactionEventEnumType): Promise<void> {
+  for (const meterValue of meterValues) {
+    // Process each meter value based on the event type
+    switch (eventType) {
+      case OCPPTransactionEventEnumType.STARTED:
+        // Handle MeterValues for transaction start
+        await this.handleMeterValuesForStart(meterValue);
+        break;
+      case OCPPTransactionEventEnumType.UPDATED:
+        // Handle MeterValues for transaction update
+        await this.handleMeterValuesForUpdate(meterValue);
+        break;
+      case OCPPTransactionEventEnumType.ENDED:
+        // Handle MeterValues for transaction end
+        await this.handleMeterValuesForEnd(meterValue);
+        break;
+    }
+  }
 }
 
-private async handleTransactionUpdated(transactionEvent: OCPPTransactionEventRequestExtended201): Promise<void> {
-  // Implement logic for handling transaction update
-  // This may include updating the database, notifying other systems, etc.
+private async handleMeterValuesForStart(meterValue: OCPPMeterValueType): Promise<void> {
+  // Implement logic for handling MeterValues at the start of a transaction
 }
 
-private async handleTransactionEnded(transactionEvent: OCPPTransactionEventRequestExtended201): Promise<void> {
-  // Implement logic for handling transaction end
-  // This may include updating the database, notifying other systems, etc.
+private async handleMeterValuesForUpdate(meterValue: OCPPMeterValueType): Promise<void> {
+  // Implement logic for handling MeterValues during a transaction update
 }
+
+private async handleMeterValuesForEnd(meterValue: OCPPMeterValueType): Promise<void> {
+  // Implement logic for handling MeterValues at the end of a transaction
+}
+
