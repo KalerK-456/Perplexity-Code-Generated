@@ -1,4 +1,4 @@
-public async handleTransactionEventResponse(headers: OCPPHeader, transactionEvent: OCPPTransactionEventRequestExtended201): Promise<OCPPTransactionEventResponse201> {
+public async handleTransactionEventResponse(headers: OCPPHeader, transactionEvent: TransactionEvent): Promise<OCPPTransactionEventResponse201> {
   try {
     // Extract header information
     const { chargingStation, tenant } = headers;
@@ -90,13 +90,30 @@ private async processMeterValues(meterValues: OCPPMeterValueType[], eventType: O
 
 private async handleMeterValuesForStart(meterValue: OCPPMeterValueType): Promise<void> {
   // Implement logic for handling MeterValues at the start of a transaction
+  // Process SampledDataTxStartedMeasurands
+  for (const sampledValue of meterValue.sampledValue) {
+    // Process each sampled value
+    // Example: Store the initial meter values, calculate energy consumption, etc.
+    console.log(`Processing started meter value: ${sampledValue.value}`);
+  }
 }
 
 private async handleMeterValuesForUpdate(meterValue: OCPPMeterValueType): Promise<void> {
   // Implement logic for handling MeterValues during a transaction update
+  // Process SampledDataTxUpdatedMeasurands
+  for (const sampledValue of meterValue.sampledValue) {
+    // Process each sampled value
+    // Example: Update energy consumption calculations, check for billing periods, etc.
+    console.log(`Processing updated meter value: ${sampledValue.value}`);
+  }
 }
 
 private async handleMeterValuesForEnd(meterValue: OCPPMeterValueType): Promise<void> {
   // Implement logic for handling MeterValues at the end of a transaction
+  // Process SampledDataTxEndedMeasurands and AlignedDataTxEndedMeasurands
+  for (const sampledValue of meterValue.sampledValue) {
+    // Process each sampled value
+    // Example: Finalize energy consumption calculations, generate billing information, update transaction records, etc.
+    console.log(`Processing ended meter value: ${sampledValue.value}`);
+  }
 }
-
