@@ -1,280 +1,267 @@
-export async function handleTransactionEventResponse(headers: {
-  chargingStation: any;
-  tenant: any;
-  chargeBoxIdentity: string;
-}, transactionEvent: {
-  eventType: 'Ended' | 'Started' | 'Updated';
-  timestamp: string;
-  triggerReason: 'Authorized' | 'CablePluggedIn' | 'ChargingRateChanged' | 'ChargingStateChanged' | 'Deauthorized' | 'EnergyLimitReached' | 'EVCommunicationLost' | 'EVConnectTimeout' | 'MeterValueClock' | 'MeterValuePeriodic' | 'TimeLimitReached' | 'Trigger' | 'UnlockCommand' | 'StopAuthorized' | 'EVDeparted' | 'EVDetected' | 'RemoteStop' | 'RemoteStart' | 'AbnormalCondition' | 'SignedDataReceived' | 'ResetCommand';
-  seqNo: number;
-  offline?: number;
-  numberOfPhasesUsed?: number;
-  cableMaxCurrent?: number;
-  reservationId?: number;
-  transactionInfo: {
-    transactionId: string;
-    chargingState?: 'Charging' | 'EVConnected' | 'SuspendedEV' | 'SuspendedEVSE' | 'Idle';
-    timeSpentCharging?: number;
-    stoppedReason?: 'DeAuthorized' | 'EmergencyStop' | 'EVDisconnected' | 'EnergyLimitReached' | 'GroundFault' | 'ImmediateReset' | 'Local' | 'LocalOutOfCredit' | 'MasterPass' | 'Other' | 'OvercurrentFault' | 'PowerLoss' | 'PowerQuality' | 'Reboot' | 'Remote' | 'SOCLimitReached';
-    remoteStartId?: number;
-  };
-  idToken?: {
-    idToken: string;
-    type: 'Central' | 'Local';
-    additionalInfo?: {
-      type: string;
-      value: string;
-    }[];
-  };
-  evse?: {
-    id: number;
-    connectorId: number;
-  };
-  meterValue?: {
-    timestamp: string;
-    sampledValue: {
-      value: number;
-      context?: 'Interruption.Begin' | 'Interruption.End' | 'Other' | 'Sample.Clock' | 'Sample.Periodic' | 'Transaction.Begin' | 'Transaction.End' | 'Trigger';
-      measurand?: 'Current.Export' | 'Current.Import' | 'Current.Offered' | 'Energy.Active.Export.Register' | 'Energy.Active.Import.Register' | 'Energy.Reactive.Export.Register' | 'Energy.Reactive.Import.Register' | 'Energy.Active.Export.Interval' | 'Energy.Active.Import.Interval' | 'Energy.Active.Net' | 'Energy.Reactive.Net' | 'Energy.Apparent.Net' | 'Energy.Apparent.Import' | 'Energy.Apparent.Export' | 'Frequency' | 'Power.Active.Export' | 'Power.Active.Import' | 'Power.Factor' | 'Power.Offered' | 'Power.Reactive.Export' | 'Power.Reactive.Import' | 'SoC' | 'Voltage';
-      phase?: 'L1' | 'L2' | 'L3' | 'N' | 'L1-N' | 'L2-N' | 'L3-N' | 'L1-L2' | 'L2-L3' | 'L3-L1';
-      location?: 'Body' | 'Cable' | 'EV' | 'Inlet' | 'Outlet';
-      signedMeterValue?: {
+public async function HandleTransactionEventResponse(headers: OCPPHeader, transactionEvent: OCPPTransactionEventRequestExtended201): Promise<OCPPTransactionEventResponse201> {
+    try {
+        // Get the header infos
+        const { chargingStation, tenant } = headers;
+
+        // Validate Transaction Event
+        OCPPValidator.getInstance().validateTransactionEvent(transactionEvent);
+
+        // Process Transaction Event
+        const transaction = await this.processTransactionEvent(tenant, chargingStation, transactionEvent);
+
+        // Save Transaction Event
+        await OCPPStorage.saveTransactionEvent(tenant, transactionEvent);
+
+        // Log Transaction Event
+        await Logging.logInfo({
+            ...LoggingHelper.getChargingStationProperties(chargingStation),
+            tenantID: tenant.id,
+            module: MODULE_NAME, method: 'HandleTransactionEventResponse',
+            action: ServerAction.OCPP_TRANSACTION_EVENT, user: transactionEvent.userID,
+            message: `Transaction event '${transactionEvent.eventType}' processed for transaction ID '${transactionEvent.transactionInfo.transactionId}'`,
+            detailedMessages: { transactionEvent }
+        });
+
+        // Return Response
+        return {
+            idTokenInfo: {
+                status: OCPPAuthorizationStatusEnumType.ACCEPTED
+            }
+        };
+    } catch (error) {
+        this.addChargingStationToException(error, headers.chargeBoxIdentity);
+        await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_TRANSACTION_EVENT, error, { transactionEvent });
+
+        // Return Error Response
+        return {
+            idTokenInfo: {
+                status: OCPPAuthorizationStatusEnumType.INVALID
+            }
+        };
+    }
+
+    // Internal Interfaces
+    interface OCPPTransactionEventRequest201 {
+        eventType: OCPPTransactionEventEnumType;
+        timestamp: string;
+        triggerReason: OCPPTriggerReasonEnumType;
+        seqNo: number;
+        offline?: number;
+        numberOfPhasesUsed?: number;
+        cableMaxCurrent?: number;
+        reservationId?: number;
+        transactionInfo: OCPPTransactionType;
+        idToken?: OCPPIdTokenType;
+        evse?: OCPPEVSEType;
+        meterValue?: OCPPMeterValueType[];
+    }
+
+    interface OCPPTransactionEventRequestExtended201 extends OCPPTransactionEventRequest201 {
+        chargeBoxID: string;
+        tagID: string;
+        timezone: string;
+        userID: string;
+        siteAreaID: string;
+        siteID: string;
+        companyID: string;
+    }
+
+    interface OCPPTransactionType {
+        transactionId: string;
+        chargingState?: OCPPChargingStateEnumType;
+        timeSpentCharging?: number;
+        stoppedReason?: OCPPReasonEnumType;
+        remoteStartId?: number;
+    }
+
+    interface OCPPMeterValueType {
+        timestamp: string;
+        sampledValue: OCPPSampledValueType[];
+    }
+
+    interface OCPPSampledValueType {
+        value: number;
+        context?: OCPPReadingContextEnumType;
+        measurand?: OCPPMeasurandEnumType;
+        phase?: OCPPPhaseEnumType;
+        location?: OCPPLocationEnumType;
+        signedMeterValue?: OCPPSignedMeterValueType;
+        unitOfMeasure?: OCPPUnitOfMeasureType;
+    }
+
+    interface OCPPSignedMeterValueType {
         signedMeterData: string;
         signingMethod: string;
         encodingMethod: string;
         publicKey: string;
-      };
-      unitOfMeasure?: {
+    }
+
+    interface OCPPUnitOfMeasureType {
         unit?: string;
         multiplier?: number;
-      };
-    }[];
-  }[];
-}): Promise<{
-  totalCost?: number;
-  chargingPriority?: number;
-  idTokenInfo?: {
-    status: 'Accepted' | 'Blocked' | 'Expired' | 'Invalid' | 'ConcurrentTx';
-    cacheExpiryDateTime?: Date;
-    chargingPriority?: number;
-    language1?: string;
-    evseId?: number[];
-    language2?: string;
-    groupIdToken?: {
-      idToken: string;
-      type: 'Central' | 'Local';
-      additionalInfo?: {
+    }
+
+    interface OCPPTransactionEventResponse201 {
+        totalCost?: number;
+        chargingPriority?: number;
+        idTokenInfo?: OCPPIdTokenInfoType;
+        updatedPersonalMessage?: string;
+    }
+
+    interface OCPPIdTokenInfoType {
+        status: OCPPAuthorizationStatusEnumType;
+        cacheExpiryDateTime?: Date;
+        chargingPriority?: number;
+        language1?: string;
+        evseId?: number[];
+        language2?: string;
+        groupIdToken?: OCPPIdTokenType;
+        personalMessage?: OCPPMessageContentType;
+    }
+
+    interface OCPPMessageContentType {
+        content: string;
+        language?: string;
+        format: OCPPMessageFormatEnumType;
+    }
+
+    interface OCPPIdTokenType {
+        idToken: string;
         type: string;
-        value: string;
-      }[];
-    };
-    personalMessage?: {
-      content: string;
-      language?: string;
-      format: 'ASCII' | 'HTML' | 'URI' | 'UTF8';
-    };
-  };
-  updatedPersonalMessage?: string;
-}> {
-  try {
-    // Extract header information
-    const { chargingStation, tenant } = headers;
-
-    // Validate the transaction event request
-    OCPPValidator.getInstance().validateTransactionEvent(transactionEvent);
-
-    // Process the transaction event
-    const transactionInfo = transactionEvent.transactionInfo;
-    const idToken = transactionEvent.idToken;
-    const evse = transactionEvent.evse;
-    const meterValues = transactionEvent.meterValue;
-
-    // Perform necessary operations based on eventType
-    switch (transactionEvent.eventType) {
-      case 'Started':
-        // Handle transaction start logic
-        await handleTransactionStarted(transactionEvent);
-        break;
-      case 'Updated':
-        // Handle transaction update logic
-        await handleTransactionUpdated(transactionEvent);
-        break;
-      case 'Ended':
-        // Handle transaction end logic
-        await handleTransactionEnded(transactionEvent);
-        break;
-      default:
-        throw new Error(`Unknown eventType: ${transactionEvent.eventType}`);
     }
 
-    // Process MeterValues if present
-    if (meterValues) {
-      await processMeterValues(meterValues, transactionEvent.eventType);
+    interface OCPPEVSEType {
+        id: number;
+        connectorId?: number;
     }
 
-    // Log the transaction event
-    await Logging.logInfo({
-      ...LoggingHelper.getChargingStationProperties(chargingStation),
-      tenantID: tenant.id,
-      module: MODULE_NAME,
-      method: 'handleTransactionEventResponse',
-      action: ServerAction.OCPP_TRANSACTION_EVENT,
-      message: `Transaction event processed for transaction ID '${transactionInfo.transactionId}'`,
-      detailedMessages: { transactionEvent }
-    });
-
-    // Return response
-    return {
-      totalCost: 0, // Example value, replace with actual calculation
-      chargingPriority: 1, // Example value, replace with actual priority
-      idTokenInfo: {
-        status: 'Accepted'
-      }
-    };
-  } catch (error) {
-    // Handle errors
-    addChargingStationToException(error, headers.chargeBoxIdentity);
-    await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_TRANSACTION_EVENT, error, { transactionEvent });
-
-    // Return error response
-    return {
-      idTokenInfo: {
-        status: 'Invalid'
-      }
-    };
-  }
-
-  async function processMeterValues(meterValues: {
-    timestamp: string;
-    sampledValue: {
-      value: number;
-      context?: 'Interruption.Begin' | 'Interruption.End' | 'Other' | 'Sample.Clock' | 'Sample.Periodic' | 'Transaction.Begin' | 'Transaction.End' | 'Trigger';
-      measurand?: 'Current.Export' | 'Current.Import' | 'Current.Offered' | 'Energy.Active.Export.Register' | 'Energy.Active.Import.Register' | 'Energy.Reactive.Export.Register' | 'Energy.Reactive.Import.Register' | 'Energy.Active.Export.Interval' | 'Energy.Active.Import.Interval' | 'Energy.Active.Net' | 'Energy.Reactive.Net' | 'Energy.Apparent.Net' | 'Energy.Apparent.Import' | 'Energy.Apparent.Export' | 'Frequency' | 'Power.Active.Export' | 'Power.Active.Import' | 'Power.Factor' | 'Power.Offered' | 'Power.Reactive.Export' | 'Power.Reactive.Import' | 'SoC' | 'Voltage';
-      phase?: 'L1' | 'L2' | 'L3' | 'N' | 'L1-N' | 'L2-N' | 'L3-N' | 'L1-L2' | 'L2-L3' | 'L3-L1';
-      location?: 'Body' | 'Cable' | 'EV' | 'Inlet' | 'Outlet';
-      signedMeterValue?: {
-        signedMeterData: string;
-        signingMethod: string;
-        encodingMethod: string;
-        publicKey: string;
-      };
-      unitOfMeasure?: {
-        unit?: string;
-        multiplier?: number;
-      };
-    }[];
-  }[], eventType: 'Ended' | 'Started' | 'Updated'): Promise<void> {
-    for (const meterValue of meterValues) {
-      // Process each meter value based on the event type
-      switch (eventType) {
-        case 'Started':
-          // Handle MeterValues for transaction start
-          await handleMeterValuesForStart(meterValue);
-          break;
-        case 'Updated':
-          // Handle MeterValues for transaction update
-          await handleMeterValuesForUpdate(meterValue);
-          break;
-        case 'Ended':
-          // Handle MeterValues for transaction end
-          await handleMeterValuesForEnd(meterValue);
-          break;
-      }
+    enum OCPPTransactionEventEnumType {
+        ENDED = 'Ended',
+        STARTED = 'Started',
+        UPDATED = 'Updated'
     }
-  }
 
-  async function handleMeterValuesForStart(meterValue: {
-    timestamp: string;
-    sampledValue: {
-      value: number;
-      context?: 'Interruption.Begin' | 'Interruption.End' | 'Other' | 'Sample.Clock' | 'Sample.Periodic' | 'Transaction.Begin' | 'Transaction.End' | 'Trigger';
-      measurand?: 'Current.Export' | 'Current.Import' | 'Current.Offered' | 'Energy.Active.Export.Register' | 'Energy.Active.Import.Register' | 'Energy.Reactive.Export.Register' | 'Energy.Reactive.Import.Register' | 'Energy.Active.Export.Interval' | 'Energy.Active.Import.Interval' | 'Energy.Active.Net' | 'Energy.Reactive.Net' | 'Energy.Apparent.Net' | 'Energy.Apparent.Import' | 'Energy.Apparent.Export' | 'Frequency' | 'Power.Active.Export' | 'Power.Active.Import' | 'Power.Factor' | 'Power.Offered' | 'Power.Reactive.Export' | 'Power.Reactive.Import' | 'SoC' | 'Voltage';
-      phase?: 'L1' | 'L2' | 'L3' | 'N' | 'L1-N' | 'L2-N' | 'L3-N' | 'L1-L2' | 'L2-L3' | 'L3-L1';
-      location?: 'Body' | 'Cable' | 'EV' | 'Inlet' | 'Outlet';
-      signedMeterValue?: {
-        signedMeterData: string;
-        signingMethod: string;
-        encodingMethod: string;
-        publicKey: string;
-      };
-      unitOfMeasure?: {
-        unit?: string;
-        multiplier?: number;
-      };
-    }[];
-  }): Promise<void> {
-    // Implement logic for handling MeterValues at the start of a transaction
-    // Process SampledDataTxStartedMeasurands
-    for (const sampledValue of meterValue.sampledValue) {
-      // Process each sampled value
-      // Example: Store the initial meter values, calculate energy consumption, etc.
-      console.log(`Processing started meter value: ${sampledValue.value}`);
-      // Add your specific logic here
+    enum OCPPTriggerReasonEnumType {
+        AUTHORIZED = 'Authorized',
+        CABLE_PLUGGED_IN = 'CablePluggedIn',
+        CHARGING_RATE_CHANGED = 'ChargingRateChanged',
+        CHARGING_STATE_CHANGED = 'ChargingStateChanged',
+        DEAUTHORIZED = 'Deauthorized',
+        ENERGY_LIMIT_REACHED = 'EnergyLimitReached',
+        EV_COMMUNICATION_LOST = 'EVCommunicationLost',
+        EV_CONNECT_TIMEOUT = 'EVConnectTimeout',
+        METER_VALUE_CLOCK = 'MeterValueClock',
+        METER_VALUE_PERIODIC = 'MeterValuePeriodic',
+        TIME_LIMIT_REACHED = 'TimeLimitReached',
+        TRIGGER = 'Trigger',
+        UNLOCK_COMMAND = 'UnlockCommand',
+        STOP_AUTHORIZED = 'StopAuthorized',
+        EV_DEPARTED = 'EVDeparted',
+        EV_DETECTED = 'EVDetected',
+        REMOTE_STOP = 'RemoteStop',
+        REMOTE_START = 'RemoteStart',
+        ABNORMAL_CONDITION = 'AbnormalCondition',
+        SIGNED_DATA_RECEIVED = 'SignedDataReceived',
+        RESET_COMMAND = 'ResetCommand'
     }
-  }
 
-  async function handleMeterValuesForUpdate(meterValue: {
-    timestamp: string;
-    sampledValue: {
-      value: number;
-      context?: 'Interruption.Begin' | 'Interruption.End' | 'Other' | 'Sample.Clock' | 'Sample.Periodic' | 'Transaction.Begin' | 'Transaction.End' | 'Trigger';
-      measurand?: 'Current.Export' | 'Current.Import' | 'Current.Offered' | 'Energy.Active.Export.Register' | 'Energy.Active.Import.Register' | 'Energy.Reactive.Export.Register' | 'Energy.Reactive.Import.Register' | 'Energy.Active.Export.Interval' | 'Energy.Active.Import.Interval' | 'Energy.Active.Net' | 'Energy.Reactive.Net' | 'Energy.Apparent.Net' | 'Energy.Apparent.Import' | 'Energy.Apparent.Export' | 'Frequency' | 'Power.Active.Export' | 'Power.Active.Import' | 'Power.Factor' | 'Power.Offered' | 'Power.Reactive.Export' | 'Power.Reactive.Import' | 'SoC' | 'Voltage';
-      phase?: 'L1' | 'L2' | 'L3' | 'N' | 'L1-N' | 'L2-N' | 'L3-N' | 'L1-L2' | 'L2-L3' | 'L3-L1';
-      location?: 'Body' | 'Cable' | 'EV' | 'Inlet' | 'Outlet';
-      signedMeterValue?: {
-        signedMeterData: string;
-        signingMethod: string;
-        encodingMethod: string;
-        publicKey: string;
-      };
-      unitOfMeasure?: {
-        unit?: string;
-        multiplier?: number;
-      };
-    }[];
-  }): Promise<void> {
-    // Implement logic for handling MeterValues during a transaction update
-    // Process SampledDataTxUpdatedMeasurands
-    for (const sampledValue of meterValue.sampledValue) {
-      // Process each sampled value
-      // Example: Update energy consumption calculations, check for billing periods, etc.
-      console.log(`Processing updated meter value: ${sampledValue.value}`);
-      // Add your specific logic here
+    enum OCPPChargingStateEnumType {
+        CHARGING = 'Charging',
+        EV_CONNECTED = 'EVConnected',
+        SUSPENDED_EV = 'SuspendedEV',
+        SUSPENDED_EVSE = 'SuspendedEVSE',
+        IDLE = 'Idle'
     }
-  }
 
-  async function handleMeterValuesForEnd(meterValue: {
-    timestamp: string;
-    sampledValue: {
-      value: number;
-      context?: 'Interruption.Begin' | 'Interruption.End' | 'Other' | 'Sample.Clock' | 'Sample.Periodic' | 'Transaction.Begin' | 'Transaction.End' | 'Trigger';
-      measurand?: 'Current.Export' | 'Current.Import' | 'Current.Offered' | 'Energy.Active.Export.Register' | 'Energy.Active.Import.Register' | 'Energy.Reactive.Export.Register' | 'Energy.Reactive.Import.Register' | 'Energy.Active.Export.Interval' | 'Energy.Active.Import.Interval' | 'Energy.Active.Net' | 'Energy.Reactive.Net' | 'Energy.Apparent.Net' | 'Energy.Apparent.Import' | 'Energy.Apparent.Export' | 'Frequency' | 'Power.Active.Export' | 'Power.Active.Import' | 'Power.Factor' | 'Power.Offered' | 'Power.Reactive.Export' | 'Power.Reactive.Import' | 'SoC' | 'Voltage';
-      phase?: 'L1' | 'L2' | 'L3' | 'N' | 'L1-N' | 'L2-N' | 'L3-N' | 'L1-L2' | 'L2-L3' | 'L3-L1';
-      location?: 'Body' | 'Cable' | 'EV' | 'Inlet' | 'Outlet';
-      signedMeterValue?: {
-        signedMeterData: string;
-        signingMethod: string;
-        encodingMethod: string;
-        publicKey: string;
-      };
-      unitOfMeasure?: {
-        unit?: string;
-        multiplier?: number;
-      };
-    }[];
-  }): Promise<void> {
-    // Implement logic for handling MeterValues at the end of a transaction
-    // Process SampledDataTxEndedMeasurands and AlignedDataTxEndedMeasurands
-    for (const sampledValue of meterValue.sampledValue) {
-      // Process each sampled value
-      // Example: Finalize energy consumption calculations, generate billing information, update transaction records, etc.
-      console.log(`Processing ended meter value: ${sampledValue.value}`);
-      // Add your specific logic here
+    enum OCPPReasonEnumType {
+        DE_AUTHORIZED = 'DeAuthorized',
+        EMERGENCY_STOP = 'EmergencyStop',
+        EV_DISCONNECTED = 'EVDisconnected',
+        ENERGY_LIMIT_REACHED = 'EnergyLimitReached',
+        GROUND_FAULT = 'GroundFault',
+        IMMEDIATE_RESET = 'ImmediateReset',
+        LOCAL = 'Local',
+        LOCAL_OUT_OF_CREDIT = 'LocalOutOfCredit',
+        MASTER_PASS = 'MasterPass',
+        OTHER = 'Other',
+        OVERCURRENT_FAULT = 'OvercurrentFault',
+        POWER_LOSS = 'PowerLoss',
+        POWER_QUALITY = 'PowerQuality',
+        REBOOT = 'Reboot',
+        REMOTE = 'Remote',
+        SOC_LIMIT_REACHED = 'SOCLimitReached'
     }
-  }
 
-  function addChargingStationToException(error: Error, chargeBoxIdentity: string): void {
-    // Implement logic to add charging station information to the exception
-    console.error(`Error for charging station ${chargeBoxIdentity}: ${error.message}`);
-  }
+    enum OCPPReadingContextEnumType {
+        INTERRUPTION_BEGIN = 'Interruption.Begin',
+        INTERRUPTION_END = 'Interruption.End',
+        OTHER = 'Other',
+        SAMPLE_CLOCK = 'Sample.Clock',
+        SAMPLE_PERIODIC = 'Sample.Periodic',
+        TRANSACTION_BEGIN = 'Transaction.Begin',
+        TRANSACTION_END = 'Transaction.End',
+        TRIGGER = 'Trigger'
+    }
+
+    enum OCPPMeasurandEnumType {
+        CURRENT_EXPORT = 'Current.Export',
+        CURRENT_IMPORT = 'Current.Import',
+        CURRENT_OFFERED = 'Current.Offered',
+        ENERGY_ACTIVE_EXPORT_REGISTER = 'Energy.Active.Export.Register',
+        ENERGY_ACTIVE_IMPORT_REGISTER = 'Energy.Active.Import.Register',
+        ENERGY_REACTIVE_EXPORT_REGISTER = 'Energy.Reactive.Export.Register',
+        ENERGY_REACTIVE_IMPORT_REGISTER = 'Energy.Reactive.Import.Register',
+        ENERGY_ACTIVE_EXPORT_INTERVAL = 'Energy.Active.Export.Interval',
+        ENERGY_ACTIVE_IMPORT_INTERVAL = 'Energy.Active.Import.Interval',
+        ENERGY_ACTIVE_NET = 'Energy.Active.Net',
+        ENERGY_REACTIVE_NET = 'Energy.Reactive.Net',
+        ENERGY_APPARENT_NET = 'Energy.Apparent.Net',
+        ENERGY_APPARENT_IMPORT = 'Energy.Apparent.Import',
+        ENERGY_APPARENT_EXPORT = 'Energy.Apparent.Export',
+        FREQUENCY = 'Frequency',
+        POWER_ACTIVE_EXPORT = 'Power.Active.Export',
+        POWER_ACTIVE_IMPORT = 'Power.Active.Import',
+        POWER_FACTOR = 'Power.Factor',
+        POWER_OFFERED = 'Power.Offered',
+        POWER_REACTIVE_EXPORT = 'Power.Reactive.Export',
+        POWER_REACTIVE_IMPORT = 'Power.Reactive.Import',
+        SOC = 'SoC',
+        VOLTAGE = 'Voltage'
+    }
+
+    enum OCPPPhaseEnumType {
+        L1 = 'L1',
+        L2 = 'L2',
+        L3 = 'L3',
+        N = 'N',
+        L1_N = 'L1-N',
+        L2_N = 'L2-N',
+        L3_N = 'L3-N',
+        L1_L2 = 'L1-L2',
+        L2_L3 = 'L2-L3',
+        L3_L1 = 'L3-L1'
+    }
+
+    enum OCPPLocationEnumType {
+        BODY = 'Body',
+        CABLE = 'Cable',
+        EV = 'EV',
+        INLET = 'Inlet',
+        OUTLET = 'Outlet'
+    }
+
+    enum OCPPMessageFormatEnumType {
+        ASCII = 'ASCII',
+        HTML = 'HTML',
+        URI = 'URI',
+        UTF8 = 'UTF8'
+    }
+
+    enum OCPPAuthorizationStatusEnumType {
+        ACCEPTED = 'Accepted',
+        BLOCKED = 'Blocked',
+        EXPIRED = 'Expired',
+        INVALID = 'Invalid',
+        CONCURRENT_TX = 'ConcurrentTx'
+    }
 }
