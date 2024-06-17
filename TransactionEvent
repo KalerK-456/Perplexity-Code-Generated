@@ -1,323 +1,275 @@
-public async handleTransactionEventResponse(headers: OCPPHeader, transactionEvent: TransactionEvent): Promise<OCPPTransactionEventResponse201> {
-export interface TransactionEvent {
-  eventType: OCPPTransactionEventEnumType;
-  timestamp: string;
-  triggerReason: OCPPTriggerReasonEnumType;
-  seqNo: number;
-  offline?: number;
-  numberOfPhasesUsed?: number;
-  cableMaxCurrent?: number;
-  reservationId?: number;
-  transactionInfo: OCPPTransactionType;
-  idToken?: OCPPIdTokenType;
-  evse?: OCPPEVSEType;
-  meterValue?: OCPPMeterValueType[];
+import { OCPPHeader, OCPPTransactionEventRequest201, OCPPTransactionEventResponse201, OCPPTransactionEventEnumType, OCPPTriggerReasonEnumType, OCPPTransactionType, OCPPChargingStateEnumType, OCPPReasonEnumType, OCPPMeterValueType, OCPPSampledValueType, OCPPReadingContextEnumType, OCPPMeasurandEnumType, OCPPPhaseEnumType, OCPPLocationEnumType, OCPPSignedMeterValueType, OCPPUnitOfMeasureType, OCPPIdTokenInfoType, OCPPAuthorizationStatusEnumType, OCPPMessageContentType, OCPPMessageFormatEnumType } from './ocppTypes';
+import { OCPPValidator } from './OCPPValidator';
+import { OCPPUtils } from './OCPPUtils';
+import { OCPPStorage } from './OCPPStorage';
+import { Logging, LoggingHelper } from './Logging';
+
+public async function handleTransactionEvent(headers: OCPPHeader, transactionEvent: OCPPTransactionEventRequest201): Promise<OCPPTransactionEventResponse201> {
+    try {
+        // Extract the header infos
+        const { chargingStation, tenant } = headers;
+
+        // Validate the transaction event request
+        OCPPValidator.getInstance().validateTransactionEvent(transactionEvent);
+
+        // Process the transaction event based on the event type
+        switch (transactionEvent.eventType) {
+            case OCPPTransactionEventEnumType.STARTED:
+                // Handle transaction started logic
+                await OCPPUtils.handleTransactionStarted(tenant, chargingStation, transactionEvent);
+                break;
+            case OCPPTransactionEventEnumType.UPDATED:
+                // Handle transaction updated logic
+                await OCPPUtils.handleTransactionUpdated(tenant, chargingStation, transactionEvent);
+                break;
+            case OCPPTransactionEventEnumType.ENDED:
+                // Handle transaction ended logic
+                await OCPPUtils.handleTransactionEnded(tenant, chargingStation, transactionEvent);
+                break;
+            default:
+                throw new Error(`Unsupported event type: ${transactionEvent.eventType}`);
+        }
+
+        // Save the transaction event
+        await OCPPStorage.saveTransactionEvent(tenant, transactionEvent);
+
+        // Log the transaction event
+        await Logging.logInfo({
+            ...LoggingHelper.getChargingStationProperties(chargingStation),
+            tenantID: tenant.id,
+            module: 'TransactionEvent',
+            method: 'handleTransactionEvent',
+            action: `OCPP_${transactionEvent.eventType.toUpperCase()}`,
+            message: `Transaction event ${transactionEvent.eventType} processed successfully`,
+            detailedMessages: { transactionEvent }
+        });
+
+        // Formulate the response
+        const response: OCPPTransactionEventResponse201 = {
+            // Populate response fields as needed
+        };
+
+        return response;
+    } catch (error) {
+        // Log the error
+        await Logging.logActionExceptionMessage(headers.tenantID, `OCPP_${transactionEvent.eventType.toUpperCase()}`, error, { transactionEvent });
+
+        // Handle the error response
+        throw error;
+    }
+}
+
+// Export interface definitions
+export interface OCPPTransactionEventRequest201 {
+    eventType: OCPPTransactionEventEnumType;
+    timestamp: string;
+    triggerReason: OCPPTriggerReasonEnumType;
+    seqNo: number;
+    offline?: number;
+    numberOfPhasesUsed?: number;
+    cableMaxCurrent?: number;
+    reservationId?: number;
+    transactionInfo: OCPPTransactionType;
+    idToken?: OCPPIdTokenType;
+    evse?: OCPPEVSEType;
+    meterValue?: OCPPMeterValueType[];
+}
+
+export interface OCPPTransactionEventRequestExtended201 extends OCPPTransactionEventRequest201 {
+    chargeBoxID: string;
+    tagID: string;
+    timezone: string;
+    userID: string;
+    siteAreaID: string;
+    siteID: string;
+    companyID: string;
 }
 
 export enum OCPPTransactionEventEnumType {
-  ENDED = 'Ended',
-  STARTED = 'Started',
-  UPDATED = 'Updated'
+    ENDED = 'Ended',
+    STARTED = 'Started',
+    UPDATED = 'Updated'
 }
 
 export enum OCPPTriggerReasonEnumType {
-  AUTHORIZED = 'Authorized',
-  CABLE_PLUGGED_IN = 'CablePluggedIn',
-  CHARGING_RATE_CHANGED = 'ChargingRateChanged',
-  CHARGING_STATE_CHANGED = 'ChargingStateChanged',
-  DEAUTHORIZED = 'Deauthorized',
-  ENERGY_LIMIT_REACHED = 'EnergyLimitReached',
-  EV_COMMUNICATION_LOST = 'EVCommunicationLost',
-  EV_CONNECT_TIMEOUT = 'EVConnectTimeout',
-  METER_VALUE_CLOCK = 'MeterValueClock',
-  METER_VALUE_PERIODIC = 'MeterValuePeriodic',
-  TIME_LIMIT_REACHED = 'TimeLimitReached',
-  TRIGGER = 'Trigger',
-  UNLOCK_COMMAND = 'UnlockCommand',
-  STOP_AUTHORIZED = 'StopAuthorized',
-  EV_DEPARTED = 'EVDeparted',
-  EV_DETECTED = 'EVDetected',
-  REMOTE_STOP = 'RemoteStop',
-  REMOTE_START = 'RemoteStart',
-  ABNORMAL_CONDITION = 'AbnormalCondition',
-  SIGNED_DATA_RECEIVED = 'SignedDataReceived',
-  RESET_COMMAND = 'ResetCommand'
+    AUTHORIZED = 'Authorized',
+    CABLE_PLUGGED_IN = 'CablePluggedIn',
+    CHARGING_RATE_CHANGED = 'ChargingRateChanged',
+    CHARGING_STATE_CHANGED = 'ChargingStateChanged',
+    DEAUTHORIZED = 'Deauthorized',
+    ENERGY_LIMIT_REACHED = 'EnergyLimitReached',
+    EV_COMMUNICATION_LOST = 'EVCommunicationLost',
+    EV_CONNECT_TIMEOUT = 'EVConnectTimeout',
+    METER_VALUE_CLOCK = 'MeterValueClock',
+    METER_VALUE_PERIODIC = 'MeterValuePeriodic',
+    TIME_LIMIT_REACHED = 'TimeLimitReached',
+    TRIGGER = 'Trigger',
+    UNLOCK_COMMAND = 'UnlockCommand',
+    STOP_AUTHORIZED = 'StopAuthorized',
+    EV_DEPARTED = 'EVDeparted',
+    EV_DETECTED = 'EVDetected',
+    REMOTE_STOP = 'RemoteStop',
+    REMOTE_START = 'RemoteStart',
+    ABNORMAL_CONDITION = 'AbnormalCondition',
+    SIGNED_DATA_RECEIVED = 'SignedDataReceived',
+    RESET_COMMAND = 'ResetCommand'
 }
 
 export interface OCPPTransactionType {
-  transactionId: string;
-  chargingState?: OCPPChargingStateEnumType;
-  timeSpentCharging?: number;
-  stoppedReason?: OCPPReasonEnumType;
-  remoteStartId?: number;
+    transactionId: string;
+    chargingState?: OCPPChargingStateEnumType;
+    timeSpentCharging?: number;
+    stoppedReason?: OCPPReasonEnumType;
+    remoteStartId?: number;
 }
 
 export enum OCPPChargingStateEnumType {
-  CHARGING = 'Charging',
-  EV_CONNECTED = 'EVConnected',
-  SUSPENDED_EV = 'SuspendedEV',
-  SUSPENDED_EVSE = 'SuspendedEVSE',
-  IDLE = 'Idle'
+    CHARGING = 'Charging',
+    EV_CONNECTED = 'EVConnected',
+    SUSPENDED_EV = 'SuspendedEV',
+    SUSPENDED_EVSE = 'SuspendedEVSE',
+    IDLE = 'Idle'
 }
 
 export enum OCPPReasonEnumType {
-  DE_AUTHORIZED = 'DeAuthorized',
-  EMERGENCY_STOP = 'EmergencyStop',
-  EV_DISCONNECTED = 'EVDisconnected',
-  ENERGY_LIMIT_REACHED = 'EnergyLimitReached',
-  GROUND_FAULT = 'GroundFault',
-  IMMEDIATE_RESET = 'ImmediateReset',
-  LOCAL = 'Local',
-  LOCAL_OUT_OF_CREDIT = 'LocalOutOfCredit',
-  MASTER_PASS = 'MasterPass',
-  OTHER = 'Other',
-  OVERCURRENT_FAULT = 'OvercurrentFault',
-  POWER_LOSS = 'PowerLoss',
-  POWER_QUALITY = 'PowerQuality',
-  REBOOT = 'Reboot',
-  REMOTE = 'Remote',
-  SOC_LIMIT_REACHED = 'SOCLimitReached'
+    DE_AUTHORIZED = 'DeAuthorized',
+    EMERGENCY_STOP = 'EmergencyStop',
+    EV_DISCONNECTED = 'EVDisconnected',
+    ENERGY_LIMIT_REACHED = 'EnergyLimitReached',
+    GROUND_FAULT = 'GroundFault',
+    IMMEDIATE_RESET = 'ImmediateReset',
+    LOCAL = 'Local',
+    LOCAL_OUT_OF_CREDIT = 'LocalOutOfCredit',
+    MASTER_PASS = 'MasterPass',
+    OTHER = 'Other',
+    OVERCURRENT_FAULT = 'OvercurrentFault',
+    POWER_LOSS = 'PowerLoss',
+    POWER_QUALITY = 'PowerQuality',
+    REBOOT = 'Reboot',
+    REMOTE = 'Remote',
+    SOC_LIMIT_REACHED = 'SOCLimitReached'
 }
 
 export interface OCPPMeterValueType {
-  timestamp: string;
-  sampledValue: OCPPSampledValueType[];
+    timestamp: string;
+    sampledValue: OCPPSampledValueType[];
 }
 
 export interface OCPPSampledValueType {
-  value: number;
-  context?: OCPPReadingContextEnumType;
-  measurand?: OCPPMeasurandEnumType;
-  phase?: OCPPPhaseEnumType;
-  location?: OCPPLocationEnumType;
-  signedMeterValue?: OCPPSignedMeterValueType;
-  unitOfMeasure?: OCPPUnitOfMeasureType;
+    value: number;
+    context?: OCPPReadingContextEnumType;
+    measurand?: OCPPMeasurandEnumType;
+    phase?: OCPPPhaseEnumType;
+    location?: OCPPLocationEnumType;
+    signedMeterValue?: OCPPSignedMeterValueType;
+    unitOfMeasure?: OCPPUnitOfMeasureType;
 }
 
 export enum OCPPReadingContextEnumType {
-  INTERRUPTION_BEGIN = 'Interruption.Begin',
-  INTERRUPTION_END = 'Interruption.End',
-  OTHER = 'Other',
-  SAMPLE_CLOCK = 'Sample.Clock',
-  SAMPLE_PERIODIC = 'Sample.Periodic',
-  TRANSACTION_BEGIN = 'Transaction.Begin',
-  TRANSACTION_END = 'Transaction.End',
-  TRIGGER = 'Trigger'
+    INTERRUPTION_BEGIN = 'Interruption.Begin',
+    INTERRUPTION_END = 'Interruption.End',
+    OTHER = 'Other',
+    SAMPLE_CLOCK = 'Sample.Clock',
+    SAMPLE_PERIODIC = 'Sample.Periodic',
+    TRANSACTION_BEGIN = 'Transaction.Begin',
+    TRANSACTION_END = 'Transaction.End',
+    TRIGGER = 'Trigger'
 }
 
 export enum OCPPMeasurandEnumType {
-  CURRENT_EXPORT = 'Current.Export',
-  CURRENT_IMPORT = 'Current.Import',
-  CURRENT_OFFERED = 'Current.Offered',
-  ENERGY_ACTIVE_EXPORT_REGISTER = 'Energy.Active.Export.Register',
-  ENERGY_ACTIVE_IMPORT_REGISTER = 'Energy.Active.Import.Register',
-  ENERGY_REACTIVE_EXPORT_REGISTER = 'Energy.Reactive.Export.Register',
-  ENERGY_REACTIVE_IMPORT_REGISTER = 'Energy.Reactive.Import.Register',
-  ENERGY_ACTIVE_EXPORT_INTERVAL = 'Energy.Active.Export.Interval',
-  ENERGY_ACTIVE_IMPORT_INTERVAL = 'Energy.Active.Import.Interval',
-  ENERGY_ACTIVE_NET = 'Energy.Active.Net',
-  ENERGY_REACTIVE_NET = 'Energy.Reactive.Net',
-  ENERGY_APPARENT_NET = 'Energy.Apparent.Net',
-  ENERGY_APPARENT_IMPORT = 'Energy.Apparent.Import',
-  ENERGY_APPARENT_EXPORT = 'Energy.Apparent.Export',
-  FREQUENCY = 'Frequency',
-  POWER_ACTIVE_EXPORT = 'Power.Active.Export',
-  POWER_ACTIVE_IMPORT = 'Power.Active.Import',
-  POWER_FACTOR = 'Power.Factor',
-  POWER_OFFERED = 'Power.Offered',
-  POWER_REACTIVE_EXPORT = 'Power.Reactive.Export',
-  POWER_REACTIVE_IMPORT = 'Power.Reactive.Import',
-  SOC = 'SoC',
-  VOLTAGE = 'Voltage'
+    CURRENT_EXPORT = 'Current.Export',
+    CURRENT_IMPORT = 'Current.Import',
+    CURRENT_OFFERED = 'Current.Offered',
+    ENERGY_ACTIVE_EXPORT_REGISTER = 'Energy.Active.Export.Register',
+    ENERGY_ACTIVE_IMPORT_REGISTER = 'Energy.Active.Import.Register',
+    ENERGY_REACTIVE_EXPORT_REGISTER = 'Energy.Reactive.Export.Register',
+    ENERGY_REACTIVE_IMPORT_REGISTER = 'Energy.Reactive.Import.Register',
+    ENERGY_ACTIVE_EXPORT_INTERVAL = 'Energy.Active.Export.Interval',
+    ENERGY_ACTIVE_IMPORT_INTERVAL = 'Energy.Active.Import.Interval',
+    ENERGY_ACTIVE_NET = 'Energy.Active.Net',
+    ENERGY_REACTIVE_NET = 'Energy.Reactive.Net',
+    ENERGY_APPARENT_NET = 'Energy.Apparent.Net',
+    ENERGY_APPARENT_IMPORT = 'Energy.Apparent.Import',
+    ENERGY_APPARENT_EXPORT = 'Energy.Apparent.Export',
+    FREQUENCY = 'Frequency',
+    POWER_ACTIVE_EXPORT = 'Power.Active.Export',
+    POWER_ACTIVE_IMPORT = 'Power.Active.Import',
+    POWER_FACTOR = 'Power.Factor',
+    POWER_OFFERED = 'Power.Offered',
+    POWER_REACTIVE_EXPORT = 'Power.Reactive.Export',
+    POWER_REACTIVE_IMPORT = 'Power.Reactive.Import',
+    SOC = 'SoC',
+    VOLTAGE = 'Voltage'
 }
 
 export enum OCPPPhaseEnumType {
-  L1 = 'L1',
-  L2 = 'L2',
-  L3 = 'L3',
-  N = 'N',
-  L1_N = 'L1-N',
-  L2_N = 'L2-N',
-  L3_N = 'L3-N',
-  L1_L2 = 'L1-L2',
-  L2_L3 = 'L2-L3',
-  L3_L1 = 'L3-L1'
+    L1 = 'L1',
+    L2 = 'L2',
+    L3 = 'L3',
+    N = 'N',
+    L1_N = 'L1-N',
+    L2_N = 'L2-N',
+    L3_N = 'L3-N',
+    L1_L2 = 'L1-L2',
+    L2_L3 = 'L2-L3',
+    L3_L1 = 'L3-L1'
 }
 
 export enum OCPPLocationEnumType {
-  BODY = 'Body',
-  CABLE = 'Cable',
-  EV = 'EV',
-  INLET = 'Inlet',
-  OUTLET = 'Outlet'
+    BODY = 'Body',
+    CABLE = 'Cable',
+    EV = 'EV',
+    INLET = 'Inlet',
+    OUTLET = 'Outlet'
 }
 
 export interface OCPPSignedMeterValueType {
-  signedMeterData: string;
-  signingMethod: string;
-  encodingMethod: string;
-  publicKey: string;
+    signedMeterData: string;
+    signingMethod: string;
+    encodingMethod: string;
+    publicKey: string;
 }
 
 export interface OCPPUnitOfMeasureType {
-  unit?: string;
-  multiplier?: number;
+    unit?: string;
+    multiplier?: number;
 }
 
 export interface OCPPTransactionEventResponse201 {
-  totalCost?: number;
-  chargingPriority?: number;
-  idTokenInfo?: OCPPIdTokenInfoType;
-  updatedPersonalMessage?: string;
+    totalCost?: number;
+    chargingPriority?: number;
+    idTokenInfo?: OCPPIdTokenInfoType;
+    updatedPersonalMessage?: string;
 }
 
 export interface OCPPIdTokenInfoType {
-  status: OCPPAuthorizationStatusEnumType;
-  cacheExpiryDateTime?: Date;
-  chargingPriority?: number;
-  language1?: string;
-  evseId?: number[];
-  language2?: string;
-  groupIdToken?: OCPPIdTokenType;
-  personalMessage?: OCPPMessageContentType;
+    status: OCPPAuthorizationStatusEnumType;
+    cacheExpiryDateTime?: Date;
+    chargingPriority?: number;
+    language1?: string;
+    evseId?: number[];
+    language2?: string;
+    groupIdToken?: OCPPIdTokenType;
+    personalMessage?: OCPPMessageContentType;
 }
 
 export interface OCPPMessageContentType {
-  content: string;
-  language?: string;
-  format: OCPPMessageFormatEnumType;
+    content: string;
+    language?: string;
+    format: OCPPMessageFormatEnumType;
 }
 
 export enum OCPPMessageFormatEnumType {
-  ASCII = 'ASCII',
-  HTML = 'HTML',
-  URI = 'URI',
-  UTF8 = 'UTF8'
+    ASCII = 'ASCII',
+    HTML = 'HTML',
+    URI = 'URI',
+    UTF8 = 'UTF8'
 }
 
 export enum OCPPAuthorizationStatusEnumType {
-  ACCEPTED = 'Accepted',
-  BLOCKED = 'Blocked',
-  EXPIRED = 'Expired',
-  INVALID = 'Invalid',
-  CONCURRENT_TX = 'ConcurrentTx'
-}
-
-  try {
-    // Extract header information
-    const { chargingStation, tenant } = headers;
-
-    // Validate the transaction event request
-    OCPPValidator.getInstance().validateTransactionEvent(transactionEvent);
-
-    // Process the transaction event
-    const transactionInfo = transactionEvent.transactionInfo;
-    const idToken = transactionEvent.idToken;
-    const evse = transactionEvent.evse;
-    const meterValues = transactionEvent.meterValue;
-
-    // Perform necessary operations based on eventType
-    switch (transactionEvent.eventType) {
-      case OCPPTransactionEventEnumType.STARTED:
-        // Handle transaction start logic
-        await this.handleTransactionStarted(transactionEvent);
-        break;
-      case OCPPTransactionEventEnumType.UPDATED:
-        // Handle transaction update logic
-        await this.handleTransactionUpdated(transactionEvent);
-        break;
-      case OCPPTransactionEventEnumType.ENDED:
-        // Handle transaction end logic
-        await this.handleTransactionEnded(transactionEvent);
-        break;
-      default:
-        throw new Error(`Unknown eventType: ${transactionEvent.eventType}`);
-    }
-
-    // Process MeterValues if present
-    if (meterValues) {
-      await this.processMeterValues(meterValues, transactionEvent.eventType);
-    }
-
-    // Log the transaction event
-    await Logging.logInfo({
-      ...LoggingHelper.getChargingStationProperties(chargingStation),
-      tenantID: tenant.id,
-      module: MODULE_NAME,
-      method: 'handleTransactionEventResponse',
-      action: ServerAction.OCPP_TRANSACTION_EVENT,
-      message: `Transaction event processed for transaction ID '${transactionInfo.transactionId}'`,
-      detailedMessages: { transactionEvent }
-    });
-
-    // Return response
-    return {
-      totalCost: 0, // Example value, replace with actual calculation
-      chargingPriority: 1, // Example value, replace with actual priority
-      idTokenInfo: {
-        status: OCPPAuthorizationStatusEnumType.ACCEPTED
-      }
-    };
-  } catch (error) {
-    // Handle errors
-    this.addChargingStationToException(error, headers.chargeBoxIdentity);
-    await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_TRANSACTION_EVENT, error, { transactionEvent });
-
-    // Return error response
-    return {
-      idTokenInfo: {
-        status: OCPPAuthorizationStatusEnumType.INVALID
-      }
-    };
-  }
-}
-
-private async processMeterValues(meterValues: OCPPMeterValueType[], eventType: OCPPTransactionEventEnumType): Promise<void> {
-  for (const meterValue of meterValues) {
-    // Process each meter value based on the event type
-    switch (eventType) {
-      case OCPPTransactionEventEnumType.STARTED:
-        // Handle MeterValues for transaction start
-        await this.handleMeterValuesForStart(meterValue);
-        break;
-      case OCPPTransactionEventEnumType.UPDATED:
-        // Handle MeterValues for transaction update
-        await this.handleMeterValuesForUpdate(meterValue);
-        break;
-      case OCPPTransactionEventEnumType.ENDED:
-        // Handle MeterValues for transaction end
-        await this.handleMeterValuesForEnd(meterValue);
-        break;
-    }
-  }
-}
-
-private async handleMeterValuesForStart(meterValue: OCPPMeterValueType): Promise<void> {
-  // Implement logic for handling MeterValues at the start of a transaction
-  // Process SampledDataTxStartedMeasurands
-  for (const sampledValue of meterValue.sampledValue) {
-    // Process each sampled value
-    // Example: Store the initial meter values, calculate energy consumption, etc.
-    console.log(`Processing started meter value: ${sampledValue.value}`);
-  }
-}
-
-private async handleMeterValuesForUpdate(meterValue: OCPPMeterValueType): Promise<void> {
-  // Implement logic for handling MeterValues during a transaction update
-  // Process SampledDataTxUpdatedMeasurands
-  for (const sampledValue of meterValue.sampledValue) {
-    // Process each sampled value
-    // Example: Update energy consumption calculations, check for billing periods, etc.
-    console.log(`Processing updated meter value: ${sampledValue.value}`);
-  }
-}
-
-private async handleMeterValuesForEnd(meterValue: OCPPMeterValueType): Promise<void> {
-  // Implement logic for handling MeterValues at the end of a transaction
-  // Process SampledDataTxEndedMeasurands and AlignedDataTxEndedMeasurands
-  for (const sampledValue of meterValue.sampledValue) {
-    // Process each sampled value
-    // Example: Finalize energy consumption calculations, generate billing information, update transaction records, etc.
-    console.log(`Processing ended meter value: ${sampledValue.value}`);
-  }
+    ACCEPTED = 'Accepted',
+    BLOCKED = 'Blocked',
+    EXPIRED = 'Expired',
+    INVALID = 'Invalid',
+    CONCURRENT_TX = 'ConcurrentTx'
 }
