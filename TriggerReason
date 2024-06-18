@@ -24,29 +24,47 @@ public async function TriggerReason(reason: TriggerReasonEnumType): Promise<Trig
   switch (reason) {
     case TriggerReasonEnumType.Authorize:
       // Handle Authorize logic
-      if (/* condition for accepting authorization */) {
+      if (/* condition for accepting authorization */) 
+      {
         return { status: StatusEnumType.Accepted };
-      } else if (/* condition for rejecting authorization */) {
+      } 
+      else if (/* condition for rejecting authorization */) 
+      {
         return { status: StatusEnumType.Rejected };
-      } else {
+      } 
+      else {
         return { status: StatusEnumType.NotImplemented };
       }
+    
     case TriggerReasonEnumType.RemoteStart:
       // Handle RemoteStart logic
-      if (/* condition for accepting remote start */) {
+      if (/* condition for accepting remote start */) 
+      {
         return { status: StatusEnumType.Accepted };
-      } else if (/* condition for rejecting remote start */) {
+      } 
+      else if (/* condition for rejecting remote start */) 
+      {
         return { status: StatusEnumType.Rejected };
-      } else {
+      } 
+      else 
+      {
         return { status: StatusEnumType.NotImplemented };
       }
-    case TriggerReasonEnumType.RemoteStop:
+
+      case TriggerReasonEnumType.RemoteStop:
       // Handle RemoteStop logic
-      if (/* condition for accepting remote stop */) {
+
+      if (/* condition for accepting remote stop */) 
+      {
         return { status: StatusEnumType.Accepted };
-      } else if (/* condition for rejecting remote stop */) {
+      } 
+
+      else if (/* condition for rejecting remote stop */) {
         return { status: StatusEnumType.Rejected };
-      } else {
+      } 
+
+      else 
+      {
         return { status: StatusEnumType.NotImplemented };
       }
     default:
