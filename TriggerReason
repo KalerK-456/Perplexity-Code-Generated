@@ -1,12 +1,17 @@
 export enum TriggerReasonEnumType {
   Authorize = 'Authorize',
   RemoteStart = 'RemoteStart',
-  RemoteStop = 'RemoteStop'
+  RemoteStop = 'RemoteStop',
+  EVDetected = 'EVDetected',
+  EVDisconnected = 'EVDisconnected',
+  EVIdle = 'EVIdle',
+  EVCharging = 'EVCharging',
+  EVEnded = 'EVEnded'
 }
 
 export enum StatusEnumType {
   Accepted = 'Accepted',
-  Rejected = 'Rejected', 
+  Rejected = 'Rejected',
   NotImplemented = 'NotImplemented'
 }
 
@@ -21,8 +26,10 @@ public async function TriggerReason(reason: TriggerReasonEnumType): Promise<Trig
       // Handle Authorize logic
       if (/* condition for accepting authorization */) {
         return { status: StatusEnumType.Accepted };
-      } else {
+      } else if (/* condition for rejecting authorization */) {
         return { status: StatusEnumType.Rejected };
+      } else {
+        return { status: StatusEnumType.NotImplemented };
       }
     case TriggerReasonEnumType.RemoteStart:
       // Handle RemoteStart logic
@@ -37,6 +44,8 @@ public async function TriggerReason(reason: TriggerReasonEnumType): Promise<Trig
       // Handle RemoteStop logic
       if (/* condition for accepting remote stop */) {
         return { status: StatusEnumType.Accepted };
+      } else if (/* condition for rejecting remote stop */) {
+        return { status: StatusEnumType.Rejected };
       } else {
         return { status: StatusEnumType.NotImplemented };
       }
