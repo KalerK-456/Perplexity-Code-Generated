@@ -1,9 +1,4 @@
 export enum TriggerReasonEnumType {
-  EVDetected = 'EVDetected',
-  EVDisconnected = 'EVDisconnected', 
-  EVIdle = 'EVIdle',
-  EVCharging = 'EVCharging',
-  EVEnded = 'EVEnded',
   Authorize = 'Authorize',
   RemoteStart = 'RemoteStart',
   RemoteStop = 'RemoteStop'
@@ -20,17 +15,31 @@ interface TriggerReasonResponse {
   // Add any additional fields as needed
 }
 
-export async function TriggerReason(reason: TriggerReasonEnumType): Promise<TriggerReasonResponse> {
+public async function TriggerReason(reason: TriggerReasonEnumType): Promise<TriggerReasonResponse> {
   switch (reason) {
     case TriggerReasonEnumType.Authorize:
       // Handle Authorize logic
-      return { status: StatusEnumType.Accepted };
+      if (/* condition for accepting authorization */) {
+        return { status: StatusEnumType.Accepted };
+      } else {
+        return { status: StatusEnumType.Rejected };
+      }
     case TriggerReasonEnumType.RemoteStart:
       // Handle RemoteStart logic
-      return { status: StatusEnumType.Rejected };
+      if (/* condition for accepting remote start */) {
+        return { status: StatusEnumType.Accepted };
+      } else if (/* condition for rejecting remote start */) {
+        return { status: StatusEnumType.Rejected };
+      } else {
+        return { status: StatusEnumType.NotImplemented };
+      }
     case TriggerReasonEnumType.RemoteStop:
       // Handle RemoteStop logic
-      return { status: StatusEnumType.NotImplemented };
+      if (/* condition for accepting remote stop */) {
+        return { status: StatusEnumType.Accepted };
+      } else {
+        return { status: StatusEnumType.NotImplemented };
+      }
     default:
       // Handle other TriggerReasons or return a default value
       return { status: StatusEnumType.Accepted };
