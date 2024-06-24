@@ -1,0 +1,89 @@
+import { ChargingStation, CSMS, EVConnectedPreSession, Authorized, EnergyTransferStarted } from './ocpp-types';
+
+class TestCase_E_02_CS {
+  chargingStation: ChargingStation;
+  csms: CSMS;
+
+  constructor(chargingStation: ChargingStation, csms: CSMS) {
+    this.chargingStation = chargingStation;
+    this.csms = csms;
+  }
+
+  async run() {
+    console.log("Running Test Case E_02_CS: Start transaction options - EnergyTransfer");
+
+    // Preparations
+    if (this.chargingStation.txStartPoint.mutability === 'ReadWrite') {
+      this.chargingStation.txStartPoint.value = 'EnergyTransfer';
+    }
+
+    // Reusable State
+    await this.executeReusableState(Authorized);
+
+    // Main Test Scenario
+    await this.manualAction("Connect the EV and EVSE.");
+
+    // Step 1: Charging Station notifies CSMS about connector status change
+    const statusNotificationRequest = await this.chargingStation.sendStatusNotificationRequest();
+    this.validateStatusNotificationRequest(statusNotificationRequest);
+
+    const notifyEventRequest = await this.chargingStation.sendNotifyEventRequest();
+    this.validateNotifyEventRequest(notifyEventRequest);
+
+    // Step 2: CSMS responds
+    await this.csms.respondToStatusNotification();
+    await this.csms.respondToNotifyEvent();
+
+    // Step 3: Charging Station sends TransactionEventRequest
+    const transactionEventRequest = await this.chargingStation.sendTransactionEventRequest();
+    this.validateTransactionEventRequest(transactionEventRequest);
+
+    // Step 4: CSMS responds with TransactionEventResponse
+    await this.csms.respondToTransactionEvent();
+
+    console.log("Test Case E_02_CS completed successfully");
+  }
+
+  private async executeReusableState(state: Authorized) {
+    // Implementation of reusable state
+    await state.execute(this.chargingStation, this.csms);
+  }
+
+  private async manualAction(action: string) {
+    console.log(`Manual Action Required: ${action}`);
+    // In a real test environment, this might pause for user input
+  }
+
+  private validateStatusNotificationRequest(request: any) {
+    if (request.connectorStatus !== 'Occupied') {
+      throw new Error('Invalid connectorStatus in StatusNotificationRequest');
+    }
+  }
+
+  private validateNotifyEventRequest(request: any) {
+    if (request.eventData[0].trigger !== 'Delta' ||
+        request.eventData[0].actualValue !== 'Occupied' ||
+        request.eventData[0].component.name !== 'Connector' ||
+        request.eventData[0].variable.name !== 'AvailabilityState') {
+      throw new Error('Invalid NotifyEventRequest');
+    }
+  }
+
+  private validateTransactionEventRequest(request: any) {
+    if (request.eventType !== 'Started' ||
+        !['RemoteStart', 'ChargingStateChanged', 'Authorized'].includes(request.triggerReason) ||
+        request.idToken.idToken !== '<Configured valid_idtoken_idtoken>' ||
+        request.idToken.type !== '<Configured valid_idtoken_type>' ||
+        !request.evse ||
+        !request.evse.connectorId ||
+        request.transactionInfo.chargingState !== 'Charging') {
+      throw new Error('Invalid TransactionEventRequest');
+    }
+  }
+}
+
+// Usage
+const chargingStation = new ChargingStation();
+const csms = new CSMS();
+const testCase = new TestCase_E_02_CS(chargingStation, csms);
+testCase.run().catch(console.error);
