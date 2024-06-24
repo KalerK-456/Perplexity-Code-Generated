@@ -1,0 +1,134 @@
+import * as tls from 'tls';
+import * as http from 'http';
+import * as WebSocket from 'ws';
+
+// Configuration
+const serverOptions = {
+  key: 'server-key.pem',
+  cert: 'server-cert.pem',
+  ca: 'ca-cert.pem',
+  requestCert: true,
+  rejectUnauthorized: true,
+};
+
+const clientOptions = {
+  key: 'client-key.pem',
+  cert: 'client-cert.pem',
+  ca: 'ca-cert.pem',
+  checkServerIdentity: () => undefined,
+};
+
+// Step 1: Charging Station initiates a TLS handshake and sends a Client Hello to the OCTT
+const client = tls.connect(443, 'localhost', clientOptions, () => {
+  console.log('Client connected', client.authorized ? 'authorized' : 'unauthorized');
+  if (!client.authorized) {
+    console.log('Client authorization error:', client.authorizationError);
+  }
+});
+
+// Step 2: OCTT responds with a Server Hello with the configured server certificate
+const server = tls.createServer(serverOptions, (socket) => {
+  console.log('Server connected', socket.authorized ? 'authorized' : 'unauthorized');
+  if (!socket.authorized) {
+    console.log('Server authorization error:', socket.authorizationError);
+  }
+
+  // Step 3: Charging Station performs the following actions
+  socket.on('data', (data) => {
+    console.log('Received:', data.toString());
+    // Perform client certificate verification, key exchange, etc.
+  });
+
+  // Step 4: OCTT performs the following actions
+  socket.write('Server Hello');
+  socket.write('Change Cipher Spec');
+  socket.write('Finished');
+});
+
+// Step 5: Charging Station sends an HTTP upgrade request to the OCTT
+client.on('secureConnect', () => {
+  const req = http.request({
+    hostname: 'localhost',
+    port: 443,
+    path: '/',
+    method: 'GET',
+    headers: {
+      'Connection': 'Upgrade',
+      'Upgrade': 'websocket',
+      'Authorization': 'Basic ' + Buffer.from('username:password').toString('base64'),
+    },
+  });
+
+  req.end();
+});
+
+// Step 6: OCTT upgrades the connection to a secured WebSocket connection
+const wss = new WebSocket.Server({ noServer: true });
+
+server.on('upgrade', (request, socket, head) => {
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    wss.emit('connection', ws, request);
+  });
+});
+
+wss.on('connection', (ws) => {
+  ws.on('message', (message) => {
+    console.log('Received:', message);
+  });
+
+  ws.send('WebSocket connection established');
+});
+
+// Step 7: Charging Station sends a BootNotificationRequest
+client.on('secureConnect', () => {
+  const ws = new WebSocket('wss://localhost');
+
+  ws.on('open', () => {
+    ws.send(JSON.stringify({
+      action: 'BootNotification',
+      payload: {
+        reason: 'PowerUp',
+        chargingStation: {
+          model: 'ModelX',
+          vendorName: 'VendorY',
+        },
+      },
+    }));
+  });
+
+  // Step 8: OCTT responds with a BootNotificationResponse with status Accepted
+  ws.on('message', (message) => {
+    const response = JSON.parse(message.toString());
+    if (response.action === 'BootNotificationResponse' && response.payload.status === 'Accepted') {
+      console.log('BootNotificationResponse accepted');
+    }
+  });
+});
+
+// Step 9: Charging Station notifies the CSMS about the current state of all connectors
+client.on('secureConnect', () => {
+  const ws = new WebSocket('wss://localhost');
+
+  ws.on('open', () => {
+    ws.send(JSON.stringify({
+      action: 'StatusNotification',
+      payload: {
+        connectorId: 1,
+        status: 'Available',
+        errorCode: 'NoError',
+      },
+    }));
+  });
+
+  // Step 10: OCTT responds accordingly
+  ws.on('message', (message) => {
+    const response = JSON.parse(message.toString());
+    if (response.action === 'StatusNotificationResponse') {
+      console.log('StatusNotificationResponse received');
+    }
+  });
+});
+
+server.listen(443, () => {
+  console.log('Server listening on port 443');
+});
