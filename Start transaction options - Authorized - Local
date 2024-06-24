@@ -1,0 +1,74 @@
+// Import necessary modules and types
+import { OCPPCommands, OCPPResponses, OCPPTypes } from 'ocpp-types'; // Assuming a library for OCPP types
+
+// Define the valid idToken and its type
+const validIdToken = '<Configured valid_idtoken_idtoken>';
+const validIdTokenType = '<Configured valid_idtoken_type>';
+
+// Define the function to start a transaction
+async function startTransaction() {
+    // Step 1: Send AuthorizeRequest
+    const authorizeRequest: OCPPCommands.AuthorizeRequest = {
+        idToken: {
+            idToken: validIdToken,
+            type: validIdTokenType
+        }
+    };
+
+    // Simulate sending the AuthorizeRequest and receiving the AuthorizeResponse
+    const authorizeResponse: OCPPResponses.AuthorizeResponse = await sendAuthorizeRequest(authorizeRequest);
+
+    if (authorizeResponse.idTokenInfo.status === 'Accepted') {
+        // Step 2: Send TransactionEventRequest with eventType Started
+        const transactionEventRequest: OCPPCommands.TransactionEventRequest = {
+            eventType: 'Started',
+            triggerReason: 'Authorized',
+            idToken: {
+                idToken: validIdToken,
+                type: validIdTokenType
+            },
+            evse: {
+                id: 1, // Assuming EVSE ID 1
+                connectorId: 1 // Assuming Connector ID 1
+            },
+            transactionInfo: {
+                chargingState: 'Charging'
+            }
+        };
+
+        // Simulate sending the TransactionEventRequest and receiving the TransactionEventResponse
+        const transactionEventResponse: OCPPResponses.TransactionEventResponse = await sendTransactionEventRequest(transactionEventRequest);
+
+        // Post scenario validation: Ensure energy transfer is started
+        if (transactionEventResponse.idTokenInfo.status === 'Accepted') {
+            console.log('Energy transfer is started');
+        } else {
+            console.error('Failed to start energy transfer');
+        }
+    } else {
+        console.error('Authorization failed');
+    }
+}
+
+/*Mock function to simulate sending AuthorizeRequest
+async function sendAuthorizeRequest(request: OCPPCommands.AuthorizeRequest): Promise<OCPPResponses.AuthorizeResponse> {
+    // Simulate the response from the CSMS
+    return {
+        idTokenInfo: {
+            status: 'Accepted'
+        }
+    };
+}
+
+// Mock function to simulate sending TransactionEventRequest
+async function sendTransactionEventRequest(request: OCPPCommands.TransactionEventRequest): Promise<OCPPResponses.TransactionEventResponse> {
+    // Simulate the response from the CSMS
+    return {
+        idTokenInfo: {
+            status: 'Accepted'
+        }
+    };
+}
+
+// Execute the startTransaction function
+startTransaction().catch(console.error);*/
