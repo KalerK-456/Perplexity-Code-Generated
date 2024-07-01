@@ -1,0 +1,76 @@
+// Define the types for the request and response
+type GetVariablesRequest = {
+    getVariableData: {
+        variable: {
+            name: string;
+        };
+        component: {
+            name: string;
+        };
+        attributeType?: string;
+    }[];
+};
+
+type GetVariablesResponse = {
+    getVariableResult: {
+        attributeStatus: string;
+        component: {
+            name: string;
+        };
+        variable: {
+            name: string;
+        };
+        attributeType?: string;
+        attributeValue?: string;
+        attributeStatusInfo?: {
+            reasonCode: string;
+        };
+    }[];
+};
+
+// Function to handle GetVariablesRequest
+function handleGetVariablesRequest(request: GetVariablesRequest): GetVariablesResponse {
+    // Define the response object
+    const response: GetVariablesResponse = {
+        getVariableResult: []
+    };
+
+    // Iterate over each variable in the request
+    request.getVariableData.forEach(variableData => {
+        // Check if the variable is known (for this example, we assume all variables are unknown)
+        const isVariableKnown = false; // This should be replaced with actual logic to check known variables
+
+        if (!isVariableKnown) {
+            response.getVariableResult.push({
+                attributeStatus: "UnknownVariable",
+                component: {
+                    name: variableData.component.name
+                },
+                variable: {
+                    name: variableData.variable.name
+                }
+            });
+        } else {
+            // Handle known variables (not required for this test case)
+        }
+    });
+
+    return response;
+}
+
+// Example usage
+const request: GetVariablesRequest = {
+    getVariableData: [
+        {
+            variable: {
+                name: "UnknownVariable"
+            },
+            component: {
+                name: "OCPPCommCtrlr"
+            }
+        }
+    ]
+};
+
+const response = handleGetVariablesRequest(request);
+console.log(response);
