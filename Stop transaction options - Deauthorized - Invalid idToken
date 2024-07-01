@@ -1,0 +1,61 @@
+import { ChargingStation, CSMS, IdToken, TransactionEventRequest, TransactionEventResponse } from './ocpp-types';
+
+async function testStopTransactionDeauthorizedInvalidIdToken(
+  chargingStation: ChargingStation,
+  csms: CSMS
+) {
+  // Manual Action: Present invalid idToken
+  const invalidIdToken: IdToken = {
+    idToken: '<Configured invalid_idtoken_idtoken>',
+    type: '<Configured invalid_idtoken_type>'
+  };
+
+  // Step 1: Charging Station sends TransactionEventRequest with invalid idToken
+  const transactionEventRequest: TransactionEventRequest = {
+    eventType: 'Started',
+    triggerReason: 'Authorized',
+    seqNo: 0,
+    idToken: invalidIdToken,
+    transactionInfo: {
+      transactionId: '<ongoing transaction id>'
+    }
+  };
+  await chargingStation.sendTransactionEventRequest(transactionEventRequest);
+
+  // Step 2: CSMS responds with TransactionEventResponse with status Invalid
+  const transactionEventResponse: TransactionEventResponse = {
+    idTokenInfo: {
+      status: 'Invalid'
+    }
+  };
+  await csms.sendTransactionEventResponse(transactionEventResponse);
+
+  // Step 3: Charging Station sends TransactionEventRequest with eventType Ended
+  const endTransactionEventRequest: TransactionEventRequest = {
+    eventType: 'Ended',
+    triggerReason: 'Deauthorized',
+    seqNo: 1,
+    transactionInfo: {
+      transactionId: '<ongoing transaction id>'
+    }
+  };
+  await chargingStation.sendTransactionEventRequest(endTransactionEventRequest);
+
+  // Step 4: CSMS responds with TransactionEventResponse with status Invalid
+  await csms.sendTransactionEventResponse(transactionEventResponse);
+
+  // Step 5: Execute Reusable State EVConnectedPostSession
+  await executeReusableState('EVConnectedPostSession');
+
+  // Step 6: Execute Reusable State EVDisconnected
+  await executeReusableState('EVDisconnected');
+
+  // Step 7: Execute Reusable State ParkingBayUnoccupied
+  await executeReusableState('ParkingBayUnoccupied');
+}
+
+// Helper function to execute reusable states
+async function executeReusableState(stateName: string) {
+  console.log(`Executing reusable state: ${stateName}`);
+  // Implementation of reusable states would go here
+}
