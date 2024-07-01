@@ -1,0 +1,71 @@
+import { OCPP201 } from 'ocpp-ts';
+
+class ChargingStation {
+  private ocppClient: OCPP201.ChargingStationClient;
+
+  constructor(ocppClient: OCPP201.ChargingStationClient) {
+    this.ocppClient = ocppClient;
+  }
+
+  async sendTransactionEventRequest(): Promise<void> {
+    const transactionEventRequest: OCPP201.TransactionEventRequest = {
+      eventType: OCPP201.TransactionEventEnum.Updated,
+      timestamp: new Date().toISOString(),
+      triggerReason: OCPP201.TriggerReasonEnum.EVDetached,
+      seqNo: 0,
+      transactionInfo: {
+        transactionId: 'TX001',
+        chargingState: OCPP201.ChargingStateEnum.SuspendedEV
+      },
+      evse: {
+        id: 1,
+        connectorId: 1,
+      },
+    };
+
+    try {
+      const response = await this.ocppClient.transactionEvent(transactionEventRequest);
+      console.log('TransactionEventResponse:', response);
+      
+      // Notify CSMS about the current state of the connector
+      await this.notifyConnectorState();
+
+      // OCTT responds with a TransactionEventResponse
+      this.handleTransactionEventResponse(response);
+    } catch (error) {
+      console.error('Error sending TransactionEventRequest:', error);
+    }
+  }
+
+  private async notifyConnectorState(): Promise<void> {
+    const statusNotificationRequest: OCPP201.StatusNotificationRequest = {
+      timestamp: new Date().toISOString(),
+      connectorStatus: OCPP201.ConnectorStatusEnum.Available,
+      evseId: 1,
+      connectorId: 1
+    };
+
+    try {
+      const response = await this.ocppClient.statusNotification(statusNotificationRequest);
+      console.log('StatusNotificationResponse:', response);
+    } catch (error) {
+      console.error('Error sending StatusNotificationRequest:', error);
+    }
+  }
+
+  private handleTransactionEventResponse(response: OCPP201.TransactionEventResponse): void {
+    console.log('Received TransactionEventResponse from OCTT:', response);
+    // Handle the response as needed
+  }
+}
+
+// Usage example
+const ocppClient = new OCPP201.ChargingStationClient(/* configuration */);
+const chargingStation = new ChargingStation(ocppClient);
+chargingStation.sendTransactionEventRequest();
+
+// Simulating OCTT response
+setTimeout(() => {
+  const octtResponse: OCPP201.TransactionEventResponse = {};
+  console.log('OCTT responds with a TransactionEventResponse:', octtResponse);
+}, 1000); // Simulating a delay of 1 second for the OCTT response
