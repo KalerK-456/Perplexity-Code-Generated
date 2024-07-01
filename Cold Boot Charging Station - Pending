@@ -1,0 +1,85 @@
+import { ChargingStation, CSMS } from './ocpp-types';
+
+async function testColdBootChargingStationPending(chargingStation: ChargingStation, csms: CSMS) {
+  // Step 1: Reboot the Charging Station
+  await chargingStation.reboot();
+
+  // Step 2: Charging Station sends BootNotificationRequest
+  const bootNotificationRequest = await chargingStation.sendBootNotificationRequest();
+  
+  // Step 3: CSMS responds with BootNotificationResponse (Pending)
+  const bootNotificationResponse = await csms.sendBootNotificationResponse({
+    status: 'Pending',
+    interval: csms.getConfiguredHeartbeatInterval()
+  });
+
+  // Step 4: CSMS sends SetVariablesRequest
+  const setVariablesRequest = await csms.sendSetVariablesRequest({
+    setVariableData: [{
+      attributeType: 'Actual',
+      attributeValue: '300',
+      component: { name: 'OCPPCommCtrlr' },
+      variable: { name: 'OfflineThreshold' }
+    }]
+  });
+
+  // Step 5: Charging Station responds with SetVariablesResponse
+  const setVariablesResponse = await chargingStation.sendSetVariablesResponse(setVariablesRequest);
+
+  // Step 6: CSMS sends GetVariablesRequest
+  const getVariablesRequest = await csms.sendGetVariablesRequest({
+    getVariableData: [{
+      component: { name: 'OCPPCommCtrlr' },
+      variable: { name: 'OfflineThreshold' }
+    }]
+  });
+
+  // Step 7: Charging Station responds with GetVariablesResponse
+  const getVariablesResponse = await chargingStation.sendGetVariablesResponse(getVariablesRequest);
+
+  // Step 8: CSMS sends GetBaseReportRequest
+  const getBaseReportRequest = await csms.sendGetBaseReportRequest({
+    requestId: csms.generateRequestId(),
+    reportBase: 'FullInventory'
+  });
+
+  // Step 9: Charging Station responds with GetBaseReportResponse
+  const getBaseReportResponse = await chargingStation.sendGetBaseReportResponse(getBaseReportRequest);
+
+  // Step 10: Charging Station sends NotifyReportRequest (repeated as needed)
+  let tbc = true;
+  while (tbc) {
+    const notifyReportRequest = await chargingStation.sendNotifyReportRequest();
+    await csms.sendNotifyReportResponse(notifyReportRequest);
+    tbc = notifyReportRequest.tbc;
+  }
+
+  // Step 11: CSMS sends RequestStartTransactionRequest
+  const requestStartTransactionRequest = await csms.sendRequestStartTransactionRequest();
+
+  // Step 12: Charging Station responds with RequestStartTransactionResponse
+  const requestStartTransactionResponse = await chargingStation.sendRequestStartTransactionResponse(requestStartTransactionRequest);
+
+  // Step 13: CSMS sends TriggerMessageRequest
+  const triggerMessageRequest = await csms.sendTriggerMessageRequest({
+    requestedMessage: 'BootNotification'
+  });
+
+  // Step 14: Charging Station responds with TriggerMessageResponse
+  const triggerMessageResponse = await chargingStation.sendTriggerMessageResponse(triggerMessageRequest);
+
+  // Step 15: Charging Station sends BootNotificationRequest
+  const secondBootNotificationRequest = await chargingStation.sendBootNotificationRequest();
+
+  // Step 16: CSMS responds with BootNotificationResponse (Accepted)
+  const secondBootNotificationResponse = await csms.sendBootNotificationResponse({
+    status: 'Accepted',
+    interval: csms.getConfiguredHeartbeatInterval()
+  });
+
+  // Step 17: Charging Station notifies CSMS about the current state of all connectors
+  await chargingStation.notifyConnectorStatus();
+
+  // Step 18: CSMS responds accordingly
+  await csms.respondToConnectorStatusNotifications();
+}
