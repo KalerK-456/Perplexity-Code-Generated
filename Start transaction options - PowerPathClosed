@@ -1,0 +1,45 @@
+import { ChargingStation, CSMS, ReusableState } from './ocpp-types';
+
+async function testStartTransactionPowerPathClosed(chargingStation: ChargingStation, csms: CSMS) {
+  // Manual Action: Present valid idToken
+  await chargingStation.presentIdToken('validIdToken');
+
+  // Execute Reusable State EVConnectedPreSession
+  await ReusableState.executeEVConnectedPreSession(chargingStation, csms);
+
+  // Step 1: The Charging Station sends a TransactionEventRequest
+  const transactionEventRequest = await chargingStation.sendTransactionEventRequest({
+    eventType: 'Started',
+    triggerReason: 'Authorized',
+    seqNo: 0,
+    idToken: {
+      idToken: 'validIdToken',
+      type: 'ISO14443'
+    },
+    evse: {
+      id: 1,
+      connectorId: 1
+    },
+    transactionInfo: {
+      transactionId: 'transaction1',
+      chargingState: 'EVConnected'
+    }
+  });
+
+  // Step 2: The OCTT responds with a TransactionEventResponse
+  const transactionEventResponse = await csms.sendTransactionEventResponse({
+    idTokenInfo: {
+      status: 'Accepted'
+    }
+  });
+
+  // Step 3: Execute Reusable State EnergyTransferStarted
+  await ReusableState.executeEnergyTransferStarted(chargingStation, csms);
+
+  // Tool validations and post-scenario validations would be implemented separately
+}
+
+// Usage
+const chargingStation = new ChargingStation();
+const csms = new CSMS();
+testStartTransactionPowerPathClosed(chargingStation, csms);
