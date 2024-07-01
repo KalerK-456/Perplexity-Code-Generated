@@ -1,0 +1,41 @@
+import { ChargingStation } from './ChargingStation';
+import { CSMS } from './CSMS';
+
+async function testColdBootChargingStationRejected(chargingStation: ChargingStation, csms: CSMS) {
+  // Manual Action: Reboot the Charging Station
+  await chargingStation.reboot();
+
+  // Step 1: The Charging Station sends a BootNotificationRequest
+  const bootNotificationRequest = await chargingStation.sendBootNotificationRequest();
+
+  // Step 2: The CSMS responds with a BootNotificationResponse with status Rejected
+  const bootNotificationResponse = await csms.respondToBootNotification(bootNotificationRequest, {
+    status: 'Rejected',
+    interval: csms.getConfiguredHeartbeatInterval()
+  });
+
+  // Step 3: The Charging Station sends a BootNotificationRequest
+  const secondBootNotificationRequest = await chargingStation.sendBootNotificationRequest();
+
+  // Step 4: The CSMS responds with a BootNotificationResponse with status Accepted
+  const secondBootNotificationResponse = await csms.respondToBootNotification(secondBootNotificationRequest, {
+    status: 'Accepted',
+    interval: csms.getConfiguredHeartbeatInterval()
+  });
+
+  // Step 5: The Charging Station notifies the CSMS about the current state of all connectors
+  const statusNotifications = await chargingStation.sendConnectorStatusNotifications();
+
+  // Step 6: The CSMS responds accordingly
+  for (const notification of statusNotifications) {
+    await csms.respondToStatusNotification(notification);
+  }
+}
+
+// Usage
+const chargingStation = new ChargingStation();
+const csms = new CSMS();
+
+testColdBootChargingStationRejected(chargingStation, csms)
+  .then(() => console.log('Test completed successfully'))
+  .catch((error) => console.error('Test failed:', error));
