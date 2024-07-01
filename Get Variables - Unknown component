@@ -1,0 +1,74 @@
+// Define the types for the request and response messages
+interface GetVariableData {
+  variable: { name: string };
+  component: { name: string };
+  attributeType?: string;
+}
+
+interface GetVariablesRequest {
+  getVariableData: GetVariableData[];
+}
+
+interface GetVariableResult {
+  attributeStatus: string;
+  component: { name: string };
+  variable: { name: string };
+  attributeType?: string;
+  attributeValue?: string | number;
+  attributeStatusInfo?: { reasonCode: string };
+}
+
+interface GetVariablesResponse {
+  getVariableResult: GetVariableResult[];
+}
+
+// Function to create a GetVariablesRequest
+function createGetVariablesRequest(): GetVariablesRequest {
+  return {
+    getVariableData: [
+      {
+        variable: { name: "OfflineThreshold" },
+        component: { name: "UnknownComponent" },
+      },
+    ],
+  };
+}
+
+// Function to handle the GetVariablesResponse
+function handleGetVariablesResponse(response: GetVariablesResponse): void {
+  response.getVariableResult.forEach((result) => {
+    console.log(`Component: ${result.component.name}`);
+    console.log(`Variable: ${result.variable.name}`);
+    console.log(`Attribute Status: ${result.attributeStatus}`);
+    if (result.attributeStatusInfo) {
+      console.log(`Reason Code: ${result.attributeStatusInfo.reasonCode}`);
+    }
+  });
+}
+
+// Simulate the test scenario
+function testGetVariablesUnknownComponent() {
+  // Step 1: OCTT sends GetVariablesRequest
+  const request = createGetVariablesRequest();
+  console.log("Sending GetVariablesRequest:", request);
+
+  // Simulate the response from the Charging Station
+  const response: GetVariablesResponse = {
+    getVariableResult: [
+      {
+        attributeStatus: "UnknownComponent",
+        component: { name: "UnknownComponent" },
+        variable: { name: "OfflineThreshold" },
+      },
+    ],
+  };
+
+  // Step 2: Charging Station responds with GetVariablesResponse
+  console.log("Received GetVariablesResponse:", response);
+
+  // Handle the response
+  handleGetVariablesResponse(response);
+}
+
+// Run the test scenario
+testGetVariablesUnknownComponent();
