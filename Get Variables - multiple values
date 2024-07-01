@@ -1,0 +1,118 @@
+import { OCPP } from 'ocpp-ts';
+
+class ChargingStation {
+  private ocppClient: OCPP.ChargingStationClient;
+
+  constructor(ocppClient: OCPP.ChargingStationClient) {
+    this.ocppClient = ocppClient;
+  }
+
+  async handleGetVariablesRequest(): Promise<void> {
+    try {
+      // Step 1: Receive GetVariablesRequest from CSMS
+      const getVariablesRequest: OCPP.GetVariablesRequest = await this.ocppClient.receiveRequest('GetVariables');
+
+      // Step 2: Prepare and send GetVariablesResponse
+      const getVariablesResponse: OCPP.GetVariablesResponse = {
+        getVariableResult: [
+          {
+            attributeStatus: OCPP.GetVariableStatusEnumType.Accepted,
+            attributeType: OCPP.AttributeEnumType.Actual,
+            attributeValue: "300",
+            component: {
+              name: "OCPPCommCtrlr"
+            },
+            variable: {
+              name: "OfflineThreshold"
+            }
+          },
+          {
+            attributeStatus: OCPP.GetVariableStatusEnumType.Accepted,
+            attributeType: OCPP.AttributeEnumType.Actual,
+            attributeValue: "true",
+            component: {
+              name: "AuthCtrlr"
+            },
+            variable: {
+              name: "LocalAuthorizeOffline"
+            }
+          }
+        ]
+      };
+
+      await this.ocppClient.sendResponse('GetVariables', getVariablesResponse);
+
+      console.log('GetVariablesResponse sent successfully');
+    } catch (error) {
+      console.error('Error handling GetVariablesRequest:', error);
+    }
+  }
+}
+
+class CSMS {
+  private ocppServer: OCPP.CentralSystemClient;
+
+  constructor(ocppServer: OCPP.CentralSystemClient) {
+    this.ocppServer = ocppServer;
+  }
+
+  async sendGetVariablesRequest(): Promise<void> {
+    try {
+      // Step 1: Send GetVariablesRequest
+      const getVariablesRequest: OCPP.GetVariablesRequest = {
+        getVariableData: [
+          {
+            component: {
+              name: "OCPPCommCtrlr"
+            },
+            variable: {
+              name: "OfflineThreshold"
+            },
+            attributeType: OCPP.AttributeEnumType.Actual
+          },
+          {
+            component: {
+              name: "AuthCtrlr"
+            },
+            variable: {
+              name: "LocalAuthorizeOffline"
+            },
+            attributeType: OCPP.AttributeEnumType.Actual
+          }
+        ]
+      };
+
+      const response: OCPP.GetVariablesResponse = await this.ocppServer.sendRequest('GetVariables', getVariablesRequest);
+
+      // Step 2: Handle GetVariablesResponse
+      console.log('Received GetVariablesResponse:', response);
+
+      // Perform any necessary validations on the response
+      this.validateGetVariablesResponse(response);
+
+    } catch (error) {
+      console.error('Error sending GetVariablesRequest:', error);
+    }
+  }
+
+  private validateGetVariablesResponse(response: OCPP.GetVariablesResponse): void {
+    // Implement validation logic here
+    // Check if the response contains the expected number of results
+    // Verify that the attributeStatus is Accepted for both results
+    // Ensure that the component and variable names match the request
+    // Validate the attributeValue for each result
+  }
+}
+
+// Usage example
+const ocppClient = new OCPP.ChargingStationClient(/* configuration */);
+const ocppServer = new OCPP.CentralSystemClient(/* configuration */);
+
+const chargingStation = new ChargingStation(ocppClient);
+const csms = new CSMS(ocppServer);
+
+// CSMS initiates the GetVariables request
+csms.sendGetVariablesRequest();
+
+// Charging Station handles the request
+chargingStation.handleGetVariablesRequest();
