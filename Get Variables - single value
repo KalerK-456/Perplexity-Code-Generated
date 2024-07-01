@@ -1,0 +1,94 @@
+// Import necessary modules
+import { WebSocket } from 'ws';
+
+// Define the request and response types
+interface GetVariablesRequest {
+    getVariableData: {
+        component: {
+            name: string;
+        };
+        variable: {
+            name: string;
+        };
+        attributeType: string;
+    }[];
+}
+
+interface GetVariablesResponse {
+    getVariableResult: {
+        attributeStatus: string;
+        attributeType: string;
+        attributeValue: string;
+        component: {
+            name: string;
+        };
+        variable: {
+            name: string;
+        };
+        attributeStatusInfo?: {
+            reasonCode: string;
+        };
+    }[];
+}
+
+// Function to create a GetVariablesRequest
+function createGetVariablesRequest(): GetVariablesRequest {
+    return {
+        getVariableData: [
+            {
+                component: {
+                    name: "OCPPCommCtrlr"
+                },
+                variable: {
+                    name: "OfflineThreshold"
+                },
+                attributeType: "Actual"
+            }
+        ]
+    };
+}
+
+// Function to handle the GetVariablesResponse
+function handleGetVariablesResponse(response: GetVariablesResponse): void {
+    const result = response.getVariableResult[0];
+    console.log(`Attribute Status: ${result.attributeStatus}`);
+    console.log(`Attribute Type: ${result.attributeType}`);
+    console.log(`Attribute Value: ${result.attributeValue}`);
+    console.log(`Component Name: ${result.component.name}`);
+    console.log(`Variable Name: ${result.variable.name}`);
+    if (result.attributeStatusInfo) {
+        console.log(`Reason Code: ${result.attributeStatusInfo.reasonCode}`);
+    }
+}
+
+// Main function to execute the test scenario
+async function main() {
+    // Create a WebSocket connection to the Charging Station
+    const ws = new WebSocket('ws://charging-station-url');
+
+    ws.on('open', () => {
+        // Send the GetVariablesRequest
+        const request = createGetVariablesRequest();
+        ws.send(JSON.stringify(request));
+    });
+
+    ws.on('message', (data) => {
+        // Parse and handle the GetVariablesResponse
+        const response: GetVariablesResponse = JSON.parse(data.toString());
+        handleGetVariablesResponse(response);
+
+        // Close the WebSocket connection
+        ws.close();
+    });
+
+    ws.on('error', (error) => {
+        console.error(`WebSocket error: ${error}`);
+    });
+
+    ws.on('close', () => {
+        console.log('WebSocket connection closed');
+    });
+}
+
+// Execute the main function
+main();
