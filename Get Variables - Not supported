@@ -1,0 +1,49 @@
+import { OCTT, ChargingStation } from './ocpp-types'; // Assume these types are defined elsewhere
+
+async function testGetVariablesNotSupportedAttributeType(octt: OCTT, chargingStation: ChargingStation) {
+  try {
+    // Step 1: OCTT sends GetVariablesRequest
+    const getVariablesRequest = {
+      getVariableData: [{
+        variable: {
+          name: "OfflineThreshold"
+        },
+        component: {
+          name: "OCPPCommCtrlr"
+        },
+        attributeType: "Target"
+      }]
+    };
+    
+    await octt.sendGetVariablesRequest(getVariablesRequest);
+
+    // Step 2: The Charging Station responds with GetVariablesResponse
+    const response = await chargingStation.receiveGetVariablesRequest(getVariablesRequest);
+    
+    // Validate the response
+    if (response.getVariableResult[0].attributeStatus !== "NotSupportedAttributeType") {
+      throw new Error("Unexpected attributeStatus in GetVariablesResponse");
+    }
+    
+    if (response.getVariableResult[0].component.name !== "OCPPCommCtrlr") {
+      throw new Error("Unexpected component name in GetVariablesResponse");
+    }
+    
+    if (response.getVariableResult[0].variable.name !== "OfflineThreshold") {
+      throw new Error("Unexpected variable name in GetVariablesResponse");
+    }
+    
+    if (response.getVariableResult[0].attributeType !== "Target") {
+      throw new Error("Unexpected attributeType in GetVariablesResponse");
+    }
+
+    console.log("Test passed: Get Variables - Not supported attribute type");
+  } catch (error) {
+    console.error("Test failed:", error.message);
+  }
+}
+
+// Usage
+const octt = new OCTT();
+const chargingStation = new ChargingStation();
+testGetVariablesNotSupportedAttributeType(octt, chargingStation);
