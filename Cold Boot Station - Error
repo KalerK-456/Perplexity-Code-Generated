@@ -1,0 +1,37 @@
+import { ChargingStation, CSMS } from './ocpp-types';
+
+async function testColdBootChargingStationSecurityError(chargingStation: ChargingStation, csms: CSMS) {
+  try {
+    // Step 1: Charging Station sends BootNotificationRequest
+    const bootNotificationRequest = await chargingStation.sendBootNotificationRequest();
+    
+    // Step 2: CSMS responds with BootNotificationResponse (Rejected)
+    const bootNotificationResponse = await csms.sendBootNotificationResponse({
+      status: 'Rejected',
+      interval: csms.config.heartbeatInterval
+    });
+    
+    // Step 3: CSMS sends GetBaseReportRequest
+    const getBaseReportRequest = await csms.sendGetBaseReportRequest({
+      reportBase: 'FullInventory'
+    });
+    
+    // Step 4: Charging Station responds with CALLERROR: SecurityError
+    const securityErrorResponse = await chargingStation.sendCallError('SecurityError');
+    
+    // Validate the response
+    if (securityErrorResponse.errorCode !== 'SecurityError') {
+      throw new Error('Expected SecurityError response from Charging Station');
+    }
+    
+    console.log('Cold Boot Charging Station - SecurityError test passed');
+  } catch (error) {
+    console.error('Test failed:', error);
+  }
+}
+
+// Usage
+const chargingStation = new ChargingStation();
+const csms = new CSMS();
+
+testColdBootChargingStationSecurityError(chargingStation, csms);
