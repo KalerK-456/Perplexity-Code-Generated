@@ -1,0 +1,44 @@
+import { OCPPChargePoint, AuthorizeRequest, AuthorizeResponse } from 'ocpp-ts';
+
+async function runTestCase() {
+  // Initialize the charge point
+  const chargePoint = new OCPPChargePoint('CP001');
+
+  try {
+    // Manual Action: Present idToken
+    console.log('Manual Action: Present invalid idToken');
+
+    // Step 1: The Charging Station sends an AuthorizeRequest
+    const authorizeRequest: AuthorizeRequest = {
+      idToken: {
+        idToken: '<Configured invalid_idtoken_idtoken>',
+        type: '<Configured invalid_idtoken_type>'
+      }
+    };
+
+    console.log('Step 1: Sending AuthorizeRequest');
+    const authorizeResponse = await chargePoint.authorize(authorizeRequest);
+
+    // Step 2: The OCTT responds with an AuthorizeResponse with idTokenInfo.status Invalid
+    console.log('Step 2: Received AuthorizeResponse');
+    if (authorizeResponse.idTokenInfo.status !== 'Invalid') {
+      throw new Error('Expected idTokenInfo.status to be Invalid');
+    }
+
+    // Wait for configured message timeout
+    const messageTimeout = 5000; // 5 seconds, adjust as needed
+    console.log(`Waiting ${messageTimeout}ms for potential unexpected messages`);
+    await new Promise(resolve => setTimeout(resolve, messageTimeout));
+
+    // Verify no TransactionEventRequest was sent
+    if (chargePoint.hasQueuedMessages()) {
+      throw new Error('Unexpected message in queue. No TransactionEventRequest should be sent.');
+    }
+
+    console.log('Test case passed successfully');
+  } catch (error) {
+    console.error('Test case failed:', error);
+  }
+}
+
+runTestCase();
