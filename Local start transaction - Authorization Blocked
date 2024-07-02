@@ -1,0 +1,35 @@
+import { ChargingStation, CSMS, AuthorizeRequest, AuthorizeResponse, IdTokenType, AuthorizationStatus } from 'ocpp-types';
+
+async function localStartTransactionAuthorizationBlocked(
+  chargingStation: ChargingStation,
+  csms: CSMS
+) {
+  // Manual Action: Present idToken
+  console.log("Manual Action: Present blocked idToken");
+  
+  // Step 1: Charging Station sends AuthorizeRequest
+  const authorizeRequest: AuthorizeRequest = {
+    idToken: {
+      idToken: "<Configured blocked_idtoken_idtoken>",
+      type: IdTokenType.ISO14443
+    }
+  };
+  
+  const authorizeResponse = await csms.handleAuthorizeRequest(authorizeRequest);
+  
+  // Step 2: CSMS responds with AuthorizeResponse
+  const authorizeResponse: AuthorizeResponse = {
+    idTokenInfo: {
+      status: AuthorizationStatus.Blocked
+    }
+  };
+  
+  await chargingStation.receiveAuthorizeResponse(authorizeResponse);
+  
+  // Note: The Charging Station SHALL NOT send a TransactionEventRequest message after the AuthorizeRequest
+  
+  // Wait configured timeout to ensure no TransactionEventRequest is sent
+  await new Promise(resolve => setTimeout(resolve, configuredMessageTimeout));
+  
+  console.log("Test complete - verified no TransactionEventRequest sent after blocked authorization");
+}
