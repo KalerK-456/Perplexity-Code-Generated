@@ -1,0 +1,93 @@
+async function retrieveLogInformationDiagnosticsLogUploadFailed() {
+  // Step 1: OCTT sends GetLogRequest
+  const getLogRequest: GetLogRequest = {
+    logType: LogType.DiagnosticsLog,
+    requestId: generateUniqueId(),
+    retries: 3,
+    retryInterval: 60,
+    log: {
+      remoteLocation: "ftp://example.com/logs",
+      oldestTimestamp: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(), // 24 hours ago
+      latestTimestamp: new Date().toISOString()
+    }
+  };
+  
+  await sendOCPPRequest(getLogRequest);
+
+  // Step 2: Charging Station responds with GetLogResponse
+  const getLogResponse = await receiveOCPPResponse();
+  
+  if (getLogResponse.status !== GetLogStatus.Accepted) {
+    throw new Error("GetLogResponse status is not Accepted");
+  }
+
+  // Step 3: Charging Station sends LogStatusNotificationRequest
+  const logStatusNotification = await receiveOCPPRequest();
+  
+  if (logStatusNotification.status !== UploadLogStatusType.Uploading) {
+    throw new Error("LogStatusNotification status is not Uploading");
+  }
+
+  // Step 4: OCTT responds with LogStatusNotificationResponse
+  await sendOCPPResponse({});
+
+  // Step 5: Charging Station sends LogStatusNotificationRequest
+  const finalLogStatusNotification = await receiveOCPPRequest();
+  
+  if (finalLogStatusNotification.status !== UploadLogStatusType.UploadFailed) {
+    throw new Error("Final LogStatusNotification status is not UploadFailed");
+  }
+
+  // Step 6: OCTT responds with LogStatusNotificationResponse
+  await sendOCPPResponse({});
+}
+
+// Helper functions (to be implemented based on your OCPP client/server setup)
+function generateUniqueId(): string {
+  // Implementation to generate a unique ID
+}
+
+async function sendOCPPRequest(request: any): Promise<void> {
+  // Implementation to send OCPP request
+}
+
+async function receiveOCPPResponse(): Promise<any> {
+  // Implementation to receive OCPP response
+}
+
+async function receiveOCPPRequest(): Promise<any> {
+  // Implementation to receive OCPP request
+}
+
+async function sendOCPPResponse(response: any): Promise<void> {
+  // Implementation to send OCPP response
+}
+
+// Enums and interfaces (to be defined based on OCPP 2.0.1 specification)
+enum LogType {
+  DiagnosticsLog = "DiagnosticsLog",
+  // Other log types...
+}
+
+enum GetLogStatus {
+  Accepted = "Accepted",
+  // Other statuses...
+}
+
+enum UploadLogStatusType {
+  Uploading = "Uploading",
+  UploadFailed = "UploadFailed",
+  // Other statuses...
+}
+
+interface GetLogRequest {
+  logType: LogType;
+  requestId: string;
+  retries: number;
+  retryInterval: number;
+  log: {
+    remoteLocation: string;
+    oldestTimestamp: string;
+    latestTimestamp: string;
+  };
+}
