@@ -1,0 +1,73 @@
+// Define the necessary types and interfaces
+interface CustomerInformationRequest {
+    report: boolean;
+    clear: boolean;
+    idToken: string;
+}
+
+interface CustomerInformationResponse {
+    status: string;
+    message?: string;
+}
+
+interface NotifyCustomerInformationRequest {
+    customerInfo: string;
+}
+
+interface NotifyCustomerInformationResponse {
+    status: string;
+    message?: string;
+}
+
+// Function to send CustomerInformationRequest
+function sendCustomerInformationRequest(idToken: string): CustomerInformationRequest {
+    return {
+        report: false,
+        clear: true,
+        idToken: idToken
+    };
+}
+
+// Function to handle CustomerInformationResponse
+function handleCustomerInformationResponse(response: CustomerInformationResponse): void {
+    if (response.status === "Accepted") {
+        console.log("Customer information cleared successfully.");
+    } else {
+        console.log("Failed to clear customer information:", response.message);
+    }
+}
+
+// Function to send NotifyCustomerInformationRequest
+function sendNotifyCustomerInformationRequest(customerInfo: string): NotifyCustomerInformationRequest {
+    return {
+        customerInfo: customerInfo
+    };
+}
+
+// Function to handle NotifyCustomerInformationResponse
+function handleNotifyCustomerInformationResponse(response: NotifyCustomerInformationResponse): void {
+    if (response.status === "Accepted") {
+        console.log("Customer information notification acknowledged.");
+    } else {
+        console.log("Failed to acknowledge customer information notification:", response.message);
+    }
+}
+
+// Example usage
+const idToken = "<Configured valid idToken fields>";
+const customerInformationRequest = sendCustomerInformationRequest(idToken);
+
+// Simulate receiving a response from the Charging Station
+const customerInformationResponse: CustomerInformationResponse = {
+    status: "Accepted"
+};
+handleCustomerInformationResponse(customerInformationResponse);
+
+// Simulate sending a NotifyCustomerInformationRequest
+const notifyCustomerInformationRequest = sendNotifyCustomerInformationRequest("Customer information updated");
+
+// Simulate receiving a response from the OCTT
+const notifyCustomerInformationResponse: NotifyCustomerInformationResponse = {
+    status: "Accepted"
+};
+handleNotifyCustomerInformationResponse(notifyCustomerInformationResponse);
