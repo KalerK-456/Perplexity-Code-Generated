@@ -1,0 +1,41 @@
+async function localStopTransactionDifferentIdToken() {
+  const chargingStation = new ChargingStation();
+  const csms = new CSMS();
+
+  // Initial state
+  await chargingStation.setState('EnergyTransferStarted');
+
+  // Manual Action: Present a different idToken than used to start the transaction.
+  await chargingStation.presentIdToken('DIFFERENT_ID_TOKEN');
+
+  // Step 1: Charging Station sends AuthorizeRequest
+  const authorizeRequest = await chargingStation.sendAuthorizeRequest({
+    idToken: {
+      idToken: 'DIFFERENT_ID_TOKEN',
+      type: 'ISO14443'
+    }
+  });
+
+  // Step 2: CSMS responds with AuthorizeResponse
+  const authorizeResponse = await csms.sendAuthorizeResponse({
+    idTokenInfo: {
+      status: 'Accepted'
+    }
+  });
+
+  // Note: The Charging Station SHALL NOT send an AuthorizeRequest AND/OR a TransactionEventRequest 
+  // message after receiving an idToken that is different, than the one used to start the transaction.
+
+  // Wait for potential unexpected messages
+  await new Promise(resolve => setTimeout(resolve, CONFIGURED_MESSAGE_TIMEOUT));
+
+  // Perform validations
+  validateNoUnexpectedMessages(chargingStation);
+}
+
+function validateNoUnexpectedMessages(chargingStation: ChargingStation) {
+  const unexpectedMessages = chargingStation.getUnexpectedMessages();
+  if (unexpectedMessages.length > 0) {
+    throw new Error(`Unexpected messages received: ${JSON.stringify(unexpectedMessages)}`);
+  }
+}
