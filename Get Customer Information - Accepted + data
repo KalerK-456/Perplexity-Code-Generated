@@ -1,0 +1,66 @@
+import { OCPPChargePoint, OCPPCentralSystem } from 'ocpp-ts';
+
+async function main() {
+  // Initialize OCPP Charge Point and Central System
+  const chargePoint = new OCPPChargePoint('CP001');
+  const centralSystem = new OCPPCentralSystem();
+
+  // Connect charge point to central system
+  await chargePoint.connect('ws://localhost:9000');
+
+  // Step 1: Central System sends GetCustomerInformationRequest
+  const getCustomerInfoRequest = {
+    requestId: 42,
+    clear: false,
+    customerIdentifier: 'CUSTOMER001',
+    idToken: {
+      idToken: 'TAG001',
+      type: 'ISO14443'
+    },
+    customerCertificate: {
+      customData: {
+        vendorId: 'VendorX'
+      },
+      certificateType: 'V2GCertificate',
+      certificate: 'BASE64_ENCODED_CERTIFICATE'
+    }
+  };
+
+  const getCustomerInfoResponse = await centralSystem.sendGetCustomerInformationRequest(chargePoint, getCustomerInfoRequest);
+
+  // Step 2: Charge Point responds with GetCustomerInformationResponse
+  console.log('GetCustomerInformationResponse:', getCustomerInfoResponse);
+
+  // Validate response
+  if (getCustomerInfoResponse.status !== 'Accepted') {
+    throw new Error('Expected status to be Accepted');
+  }
+
+  // Step 3: Charge Point sends CustomerInformationRequest
+  const customerInfoRequest = await chargePoint.waitForCustomerInformationRequest();
+
+  // Step 4: Central System responds with CustomerInformationResponse
+  const customerInfoResponse = {
+    status: 'Accepted'
+  };
+
+  await centralSystem.sendCustomerInformationResponse(chargePoint, customerInfoResponse);
+
+  // Validate CustomerInformationRequest
+  console.log('CustomerInformationRequest:', customerInfoRequest);
+  if (customerInfoRequest.requestId !== getCustomerInfoRequest.requestId) {
+    throw new Error('RequestId mismatch');
+  }
+
+  if (customerInfoRequest.report.customData?.vendorId !== 'VendorX') {
+    throw new Error('VendorId mismatch');
+  }
+
+  // Additional validations can be added here based on the specific requirements
+
+  console.log('Test scenario completed successfully');
+}
+
+main().catch(error => {
+  console.error('Test scenario failed:', error);
+});
