@@ -1,0 +1,102 @@
+import { v4 as uuidv4 } from 'uuid';
+
+// Interfaces
+interface CustomerInformationRequest {
+  requestId: number;
+  report: boolean;
+  clear: boolean;
+  customerId?: string;
+}
+
+interface CustomerInformationResponse {
+  status: 'Accepted' | 'Rejected';
+}
+
+interface NotifyCustomerInformationRequest {
+  requestId: number;
+  tbc: boolean;
+  seqNo: number;
+  generatedAt: string;
+  data: string;
+}
+
+interface NotifyCustomerInformationResponse {
+  status: 'Accepted' | 'Rejected';
+}
+
+// Simulated Charging Station
+class ChargingStation {
+  private customerData: string = 'Initial customer data';
+
+  async handleCustomerInformationRequest(request: CustomerInformationRequest): Promise<CustomerInformationResponse> {
+    console.log('Charging Station: Received CustomerInformationRequest', request);
+
+    if (request.clear) {
+      this.customerData = '';
+    }
+
+    return { status: 'Accepted' };
+  }
+
+  async sendNotifyCustomerInformationRequest(): Promise<NotifyCustomerInformationRequest> {
+    const request: NotifyCustomerInformationRequest = {
+      requestId: Math.floor(Math.random() * 1000000),
+      tbc: false,
+      seqNo: 0,
+      generatedAt: new Date().toISOString(),
+      data: this.customerData,
+    };
+
+    console.log('Charging Station: Sending NotifyCustomerInformationRequest', request);
+    return request;
+  }
+}
+
+// Simulated Central System (OCTT)
+class CentralSystem {
+  async sendCustomerInformationRequest(report: boolean, clear: boolean): Promise<CustomerInformationRequest> {
+    const request: CustomerInformationRequest = {
+      requestId: Math.floor(Math.random() * 1000000),
+      report,
+      clear,
+      customerId: uuidv4(),
+    };
+
+    console.log('Central System: Sending CustomerInformationRequest', request);
+    return request;
+  }
+
+  async handleNotifyCustomerInformationRequest(request: NotifyCustomerInformationRequest): Promise<NotifyCustomerInformationResponse> {
+    console.log('Central System: Received NotifyCustomerInformationRequest', request);
+    return { status: 'Accepted' };
+  }
+}
+
+// Main function to simulate the interaction
+async function simulateCustomerInformationExchange() {
+  const chargingStation = new ChargingStation();
+  const centralSystem = new CentralSystem();
+
+  // Step 1-2: OCTT sends CustomerInformationRequest, Charging Station responds
+  const request1 = await centralSystem.sendCustomerInformationRequest(true, true);
+  const response1 = await chargingStation.handleCustomerInformationRequest(request1);
+  console.log('Charging Station Response:', response1);
+
+  // Step 3-4: Charging Station sends NotifyCustomerInformationRequest, OCTT responds
+  const notifyRequest1 = await chargingStation.sendNotifyCustomerInformationRequest();
+  const notifyResponse1 = await centralSystem.handleNotifyCustomerInformationRequest(notifyRequest1);
+  console.log('Central System Response:', notifyResponse1);
+
+  // Step 5-6: OCTT sends another CustomerInformationRequest, Charging Station responds
+  const request2 = await centralSystem.sendCustomerInformationRequest(true, false);
+  const response2 = await chargingStation.handleCustomerInformationRequest(request2);
+  console.log('Charging Station Response:', response2);
+
+  // Step 7-8: Charging Station sends another NotifyCustomerInformationRequest, OCTT responds
+  const notifyRequest2 = await chargingStation.sendNotifyCustomerInformationRequest();
+  const notifyResponse2 = await centralSystem.handleNotifyCustomerInformationRequest(notifyRequest2);
+  console.log('Central System Response:', notifyResponse2);
+}
+
+// Run the simulation
+simulateCustomerInformationExchange().catch(console.error);
