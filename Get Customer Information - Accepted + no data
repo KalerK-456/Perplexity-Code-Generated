@@ -1,0 +1,123 @@
+import { OCPPClient } from './ocpp-client'; // Assume this is your OCPP client implementation
+
+class CustomerInformationHandler {
+  private ocppClient: OCPPClient;
+
+  constructor(ocppClient: OCPPClient) {
+    this.ocppClient = ocppClient;
+  }
+
+  async sendCustomerInformationRequest(): Promise<void> {
+    const request: CustomerInformationRequest = {
+      requestId: this.generateRequestId(),
+      report: true,
+      clear: false,
+      customerIdentifier: 'CUSTOMER_001', // Example customer identifier
+      idToken: {
+        idToken: 'VALID_ID_TOKEN',
+        type: 'ISO14443'
+      },
+      customerCertificate: {
+        customData: {
+          vendorId: 'VENDOR_XYZ'
+        },
+        certificateType: 'V2GCertificate',
+        certificate: 'BASE64_ENCODED_CERTIFICATE'
+      }
+    };
+
+    try {
+      const response = await this.ocppClient.send('CustomerInformationRequest', request);
+      this.handleCustomerInformationResponse(response);
+    } catch (error) {
+      console.error('Error sending CustomerInformationRequest:', error);
+    }
+  }
+
+  private handleCustomerInformationResponse(response: CustomerInformationResponse): void {
+    if (response.status === 'Accepted') {
+      console.log('CustomerInformationRequest accepted');
+      // Wait for NotifyCustomerInformationRequest
+    } else {
+      console.log('CustomerInformationRequest not accepted. Status:', response.status);
+    }
+  }
+
+  async handleNotifyCustomerInformationRequest(request: NotifyCustomerInformationRequest): Promise<NotifyCustomerInformationResponse> {
+    console.log('Received NotifyCustomerInformationRequest:', request);
+    
+    // Process the customer information data
+    // ...
+
+    // Respond to the Charging Station
+    const response: NotifyCustomerInformationResponse = {
+      status: 'Accepted'
+    };
+
+    return response;
+  }
+
+  private generateRequestId(): string {
+    return 'REQ_' + Math.random().toString(36).substr(2, 9);
+  }
+}
+
+// Usage example
+const ocppClient = new OCPPClient(/* configuration */);
+const customerInfoHandler = new CustomerInformationHandler(ocppClient);
+
+// Send CustomerInformationRequest
+customerInfoHandler.sendCustomerInformationRequest();
+
+// Handle incoming NotifyCustomerInformationRequest
+ocppClient.on('NotifyCustomerInformationRequest', async (request) => {
+  const response = await customerInfoHandler.handleNotifyCustomerInformationRequest(request);
+  return response;
+});
+
+// Types (these should be defined in your OCPP types file)
+interface CustomerInformationRequest {
+  requestId: string;
+  report: boolean;
+  clear: boolean;
+  customerIdentifier?: string;
+  idToken?: IdToken;
+  customerCertificate?: CustomerCertificate;
+}
+
+interface CustomerInformationResponse {
+  status: 'Accepted' | 'Rejected';
+  statusInfo?: StatusInfo;
+}
+
+interface NotifyCustomerInformationRequest {
+  requestId: string;
+  tbc: boolean;
+  seqNo: number;
+  generatedAt: string;
+  data: string;
+}
+
+interface NotifyCustomerInformationResponse {
+  status: 'Accepted' | 'Rejected';
+}
+
+interface IdToken {
+  idToken: string;
+  type: string;
+}
+
+interface CustomerCertificate {
+  customData?: CustomData;
+  certificateType: string;
+  certificate: string;
+}
+
+interface CustomData {
+  vendorId: string;
+}
+
+interface StatusInfo {
+  reasonCode: string;
+  additionalInfo?: string;
+}
