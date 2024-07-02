@@ -1,0 +1,59 @@
+import { OCTT, ChargingStation, GetLogRequest, GetLogResponse, LogStatusNotificationRequest, LogStatusNotificationResponse } from './ocpp-types'; // Assume these types are defined
+
+class RetrieveDiagnosticsLogTest {
+  private octt: OCTT;
+  private chargingStation: ChargingStation;
+
+  constructor(octt: OCTT, chargingStation: ChargingStation) {
+    this.octt = octt;
+    this.chargingStation = chargingStation;
+  }
+
+  async runTest(): Promise<void> {
+    try {
+      // Step 1: OCTT sends GetLogRequest
+      const getLogRequest: GetLogRequest = {
+        logType: 'DiagnosticsLog',
+        requestId: 'test-request-id',
+        retries: 0,
+        retryInterval: 0,
+        log: {
+          remoteLocation: 'http://example.com/logs',
+          oldestTimestamp: new Date().toISOString(),
+          latestTimestamp: new Date().toISOString()
+        }
+      };
+      await this.octt.sendGetLogRequest(getLogRequest);
+
+      // Step 2: Charging Station responds with GetLogResponse
+      const getLogResponse: GetLogResponse = await this.chargingStation.receiveGetLogRequest(getLogRequest);
+      console.log('GetLogResponse received:', getLogResponse);
+
+      // Step 3: Charging Station sends LogStatusNotificationRequest
+      const logStatusNotification1: LogStatusNotificationRequest = await this.chargingStation.sendLogStatusNotification();
+      console.log('First LogStatusNotificationRequest received:', logStatusNotification1);
+
+      // Step 4: OCTT responds with LogStatusNotificationResponse
+      const logStatusResponse1: LogStatusNotificationResponse = await this.octt.sendLogStatusNotificationResponse(logStatusNotification1);
+      console.log('First LogStatusNotificationResponse sent:', logStatusResponse1);
+
+      // Step 5: Charging Station sends another LogStatusNotificationRequest
+      const logStatusNotification2: LogStatusNotificationRequest = await this.chargingStation.sendLogStatusNotification();
+      console.log('Second LogStatusNotificationRequest received:', logStatusNotification2);
+
+      // Step 6: OCTT responds with LogStatusNotificationResponse
+      const logStatusResponse2: LogStatusNotificationResponse = await this.octt.sendLogStatusNotificationResponse(logStatusNotification2);
+      console.log('Second LogStatusNotificationResponse sent:', logStatusResponse2);
+
+      console.log('Test completed successfully');
+    } catch (error) {
+      console.error('Test failed:', error);
+    }
+  }
+}
+
+// Usage
+const octt = new OCTT();
+const chargingStation = new ChargingStation();
+const test = new RetrieveDiagnosticsLogTest(octt, chargingStation);
+test.runTest();
