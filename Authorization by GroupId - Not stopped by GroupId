@@ -1,0 +1,74 @@
+import { ChargingStation, CSMS, IdToken } from 'ocpp-2.0.1';
+
+async function main() {
+  const chargingStation = new ChargingStation();
+  const csms = new CSMS();
+
+  // Manual Action: Present valid idToken with <Configured GroupId>
+  const validIdToken: IdToken = {
+    idToken: '<Configured valid_idtoken_idtoken>',
+    type: '<Configured valid_idtoken_type>'
+  };
+  
+  // Step 1: The Charging Station sends an AuthorizeRequest
+  const authorizeRequest = await chargingStation.sendAuthorizeRequest(validIdToken);
+
+  // Step 2: The CSMS responds with an AuthorizeResponse
+  const authorizeResponse = await csms.sendAuthorizeResponse({
+    idTokenInfo: {
+      status: 'Accepted',
+      groupIdToken: {
+        idToken: '<Configured groupIdToken>'
+      }
+    }
+  });
+
+  // Step 3: The Charging Station sends a TransactionEventRequest
+  const transactionEventRequest = await chargingStation.sendTransactionEventRequest({
+    eventType: 'Started',
+    triggerReason: 'Authorized',
+    seqNo: 0,
+    idToken: validIdToken,
+    transactionInfo: {
+      transactionId: 'transaction1'
+    }
+  });
+
+  // Step 4: The CSMS responds with a TransactionEventResponse
+  const transactionEventResponse = await csms.sendTransactionEventResponse({
+    idTokenInfo: {
+      status: 'Accepted',
+      groupIdToken: {
+        idToken: '<Configured groupIdToken>'
+      }
+    }
+  });
+
+  // Step 5: Execute Reusable State EnergyTransferStarted
+  await chargingStation.executeEnergyTransferStarted();
+
+  // Manual Action: Present valid idToken with <Configured GroupId>
+  const otherValidIdToken: IdToken = {
+    idToken: '<Configured valid_idtoken_idtoken>',
+    type: '<Configured valid_idtoken_type>'
+  };
+
+  // Step 6: The Charging Station sends an AuthorizeRequest
+  const authorizeRequest2 = await chargingStation.sendAuthorizeRequest(otherValidIdToken);
+
+  // Step 7: The CSMS responds with an AuthorizeResponse
+  const authorizeResponse2 = await csms.sendAuthorizeResponse({
+    idTokenInfo: {
+      status: 'Accepted',
+      groupIdToken: {
+        idToken: '<Configured groupIdToken>'
+      }
+    }
+  });
+
+  // Verify that the energy transfer is not stopped
+  const isEnergyTransferStopped = await chargingStation.isEnergyTransferStopped();
+  console.assert(!isEnergyTransferStopped, 'Energy transfer should not be stopped');
+}
+
+main().catch(console.error);
