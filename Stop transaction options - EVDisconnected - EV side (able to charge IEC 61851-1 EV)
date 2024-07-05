@@ -1,0 +1,55 @@
+import { ChargingStation, CSMS, EVSimulator } from './testFramework';
+
+async function main() {
+  // Initialize test components
+  const chargingStation = new ChargingStation();
+  const csms = new CSMS();
+  const evSimulator = new EVSimulator();
+
+  // Configure test setup
+  await chargingStation.configure({
+    TxStopPoint: ['EVDisconnected']
+  });
+
+  // Start with EnergyTransferStarted state
+  await chargingStation.setInitialState('EnergyTransferStarted');
+
+  // Simulate EV disconnection (EV side)
+  await evSimulator.disconnectFromEVSE();
+
+  // Wait for the Charging Station to detect EV disconnection
+  await chargingStation.waitForEVDisconnection();
+
+  // Charging Station should send a TransactionEventRequest
+  const transactionEventRequest = await csms.waitForTransactionEventRequest();
+
+  // Validate the TransactionEventRequest
+  if (
+    transactionEventRequest.eventType !== 'Ended' ||
+    transactionEventRequest.triggerReason !== 'EVDisconnected' ||
+    transactionEventRequest.transactionInfo.stoppedReason !== 'EVDisconnected'
+  ) {
+    throw new Error('Invalid TransactionEventRequest');
+  }
+
+  // CSMS responds with a TransactionEventResponse
+  await csms.sendTransactionEventResponse({
+    status: 'Accepted'
+  });
+
+  // Execute Reusable State ParkingBayUnoccupied
+  await chargingStation.executeReusableState('ParkingBayUnoccupied');
+
+  // Validate post-scenario state
+  const finalState = await chargingStation.getCurrentState();
+  if (finalState !== 'Available') {
+    throw new Error('Charging Station not in Available state after transaction end');
+  }
+
+  console.log('Test scenario completed successfully');
+}
+
+main().catch(error => {
+  console.error('Test scenario failed:', error);
+  process.exit(1);
+});
