@@ -1,0 +1,88 @@
+import WebSocket from 'ws';
+
+// Define constants and configurations
+const WEBSOCKET_URL = 'wss://example.com/ocpp';
+const VALID_ID_TOKEN = 'valid_id_token';
+const TRANSACTION_DURATION = 5000; // in milliseconds
+
+// Define the WebSocket client
+const ws = new WebSocket(WEBSOCKET_URL);
+
+// Define the message structures
+interface TransactionEventRequest {
+  eventType: string;
+  triggerReason: string;
+  idToken?: {
+    idToken: string;
+    type: string;
+  };
+  transactionInfo?: {
+    chargingState: string;
+  };
+  offline: boolean;
+}
+
+interface TransactionEventResponse {
+  idTokenInfo: {
+    status: string;
+  };
+}
+
+// Define the main test scenario
+async function main() {
+  ws.on('open', () => {
+    console.log('WebSocket connection opened');
+    // Step 1: Close the WebSocket connection and do not accept a reconnect
+    ws.close();
+    console.log('WebSocket connection closed');
+  });
+
+  ws.on('close', async () => {
+    console.log('WebSocket connection closed by server');
+    // Manual Action: Present valid idToken
+    await new Promise(resolve => setTimeout(resolve, TRANSACTION_DURATION));
+    // Step 2: Accept reconnection attempt
+    ws.reconnect();
+    console.log('WebSocket reconnection attempted');
+  });
+
+  ws.on('reconnect', () => {
+    console.log('WebSocket reconnected');
+    // Step 3: Send TransactionEventRequest
+    const transactionEventRequest: TransactionEventRequest = {
+      eventType: 'Started',
+      triggerReason: 'Authorized',
+      idToken: {
+        idToken: VALID_ID_TOKEN,
+        type: 'RFID'
+      },
+      offline: true
+    };
+    ws.send(JSON.stringify(transactionEventRequest));
+    console.log('TransactionEventRequest sent');
+  });
+
+  ws.on('message', (data: string) => {
+    const response: TransactionEventResponse = JSON.parse(data);
+    console.log('TransactionEventResponse received:', response);
+
+    // Step 4: Check idTokenInfo.status
+    if (response.idTokenInfo.status === 'Invalid') {
+      // Step 5: Send TransactionEventRequest with triggerReason Deauthorized
+      const deauthorizedRequest: TransactionEventRequest = {
+        eventType: 'Updated',
+        triggerReason: 'Deauthorized',
+        offline: false
+      };
+      ws.send(JSON.stringify(deauthorizedRequest));
+      console.log('Deauthorized TransactionEventRequest sent');
+    }
+  });
+
+  ws.on('error', (error: Error) => {
+    console.error('WebSocket error:', error);
+  });
+}
+
+// Run the main test scenario
+main();
