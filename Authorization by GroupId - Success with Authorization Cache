@@ -1,0 +1,80 @@
+import { ChargingStation, CSMS, IdToken, TransactionEventRequest, TransactionEventResponse } from 'ocpp-types';
+
+async function main(chargingStation: ChargingStation, csms: CSMS) {
+  // Configuration
+  const validIdToken: IdToken = {
+    idToken: "<Configured valid_idtoken_idtoken>",
+    type: "<Configured valid_idtoken_type>"
+  };
+  const validIdToken2: IdToken = {
+    idToken: "<Configured valid_idtoken2_idtoken>",
+    type: "<Configured valid_idtoken2_type>"
+  };
+  const configuredGroupId = "<Configured GroupId>";
+
+  // Manual Action: Present valid idToken with <Configured GroupId> which is configured in the Authorization Cache
+  console.log("Manual Action: Present valid idToken with configured GroupId");
+
+  // Step 1: Charging Station sends TransactionEventRequest
+  const transactionEventRequest1: TransactionEventRequest = await chargingStation.sendTransactionEventRequest({
+    eventType: "Started",
+    triggerReason: "Authorized",
+    seqNo: 0,
+    idToken: validIdToken,
+    timestamp: new Date().toISOString()
+  });
+
+  // Step 2: CSMS responds with TransactionEventResponse
+  const transactionEventResponse1: TransactionEventResponse = await csms.sendTransactionEventResponse({
+    idTokenInfo: {
+      status: "Accepted",
+      groupIdToken: {
+        idToken: configuredGroupId
+      }
+    }
+  });
+
+  // Step 3: Execute Reusable State EnergyTransferStarted
+  await executeReusableStateEnergyTransferStarted(chargingStation, csms);
+
+  // Manual Action: Present valid idToken2 with <Configured GroupId> which is configured in the Authorization Cache
+  console.log("Manual Action: Present valid idToken2 with configured GroupId");
+
+  // Step 4: Execute Reusable State StopAuthorized
+  await executeReusableStateStopAuthorized(chargingStation, csms, validIdToken2);
+
+  // Step 5: Execute Reusable State EVConnectedPostSession
+  await executeReusableStateEVConnectedPostSession(chargingStation, csms);
+
+  // Step 6: Execute Reusable State EVDisconnected
+  await executeReusableStateEVDisconnected(chargingStation, csms);
+
+  // Step 7: Execute Reusable State ParkingBayUnoccupied
+  await executeReusableStateParkingBayUnoccupied(chargingStation, csms);
+}
+
+// Helper functions for reusable states (implementation details omitted for brevity)
+async function executeReusableStateEnergyTransferStarted(chargingStation: ChargingStation, csms: CSMS) {
+  // Implementation of EnergyTransferStarted state
+}
+
+async function executeReusableStateStopAuthorized(chargingStation: ChargingStation, csms: CSMS, idToken: IdToken) {
+  // Implementation of StopAuthorized state
+}
+
+async function executeReusableStateEVConnectedPostSession(chargingStation: ChargingStation, csms: CSMS) {
+  // Implementation of EVConnectedPostSession state
+}
+
+async function executeReusableStateEVDisconnected(chargingStation: ChargingStation, csms: CSMS) {
+  // Implementation of EVDisconnected state
+}
+
+async function executeReusableStateParkingBayUnoccupied(chargingStation: ChargingStation, csms: CSMS) {
+  // Implementation of ParkingBayUnoccupied state
+}
+
+// Run the test
+const chargingStation = new ChargingStation();
+const csms = new CSMS();
+main(chargingStation, csms);
