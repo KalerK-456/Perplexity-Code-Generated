@@ -1,0 +1,56 @@
+import { OCPP201 } from 'ocpp-2.0.1-implementation';
+import { ChargingStation, CSMS } from 'test-framework';
+
+async function main() {
+  const chargingStation = new ChargingStation();
+  const csms = new CSMS();
+
+  // Step 1: CSMS sends RequestStartTransactionRequest
+  const requestStartTransactionRequest: OCPP201.RequestStartTransactionRequest = {
+    evseId: 1,
+    remoteStartId: 1,
+    idToken: {
+      idToken: '<Configured valid_idtoken_idtoken>',
+      type: '<Configured valid_idtoken_type>'
+    }
+  };
+  
+  const requestStartTransactionResponse = await csms.sendRequestStartTransaction(chargingStation, requestStartTransactionRequest);
+
+  // Step 2: Charging Station responds with RequestStartTransactionResponse
+  if (requestStartTransactionResponse.status !== 'Accepted') {
+    throw new Error('RequestStartTransactionResponse status is not Accepted');
+  }
+
+  // Step 3: Execute Reusable State EVConnectedPreSession
+  await chargingStation.executeReusableState('EVConnectedPreSession');
+
+  // Step 4: Charging Station sends TransactionEventRequest
+  const transactionEventRequest = await chargingStation.waitForTransactionEventRequest();
+
+  // Validate TransactionEventRequest
+  if (transactionEventRequest.eventType !== 'Started' ||
+      transactionEventRequest.triggerReason !== 'RemoteStart' ||
+      transactionEventRequest.transactionInfo?.chargingState !== 'EVConnected' ||
+      transactionEventRequest.idToken?.idToken !== '<Configured valid_idtoken_idtoken>' ||
+      transactionEventRequest.idToken?.type !== '<Configured valid_idtoken_type>') {
+    throw new Error('TransactionEventRequest validation failed');
+  }
+
+  // Step 5: CSMS responds with TransactionEventResponse
+  const transactionEventResponse: OCPP201.TransactionEventResponse = {
+    idTokenInfo: {
+      status: 'Accepted'
+    }
+  };
+  await csms.sendTransactionEventResponse(chargingStation, transactionEventResponse);
+
+  // Step 6: Execute Reusable State EnergyTransferStarted
+  await chargingStation.executeReusableState('EnergyTransferStarted');
+
+  console.log('Test case completed successfully');
+}
+
+main().catch(error => {
+  console.error('Test case failed:', error);
+});
