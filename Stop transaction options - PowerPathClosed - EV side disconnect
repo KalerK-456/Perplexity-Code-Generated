@@ -1,0 +1,62 @@
+import { ChargingStation, CSMS, OCPPCommands } from 'ocpp-ts';
+
+// Configure the Charging Station and CSMS
+const chargingStation = new ChargingStation({
+  // Add necessary configuration here
+});
+
+const csms = new CSMS({
+  // Add necessary configuration here
+});
+
+// Define the main test scenario
+async function main() {
+  try {
+    // Step 1: Execute Reusable State EVConnectedPreSession
+    await chargingStation.executeReusableState('EVConnectedPreSession');
+
+    // Step 2: Present configured masterpass idToken
+    const authorizeRequest = new OCPPCommands.AuthorizeRequest({
+      idToken: {
+        idToken: '<Configured masterpass_idtoken_idtoken>',
+        type: '<Configured masterpass_idtoken_type>'
+      }
+    });
+    const authorizeResponse = await chargingStation.sendRequest(authorizeRequest);
+    if (authorizeResponse.idTokenInfo.status !== 'Accepted') {
+      throw new Error('Authorization failed');
+    }
+
+    // Step 3: Select to stop the transaction on EVSE 1
+    const transactionEventRequest = new OCPPCommands.TransactionEventRequest({
+      eventType: 'Ended',
+      triggerReason: 'RemoteStop',
+      transactionInfo: {
+        stoppedReason: 'Remote'
+      },
+      idToken: {
+        idToken: '<Configured masterpass_idtoken_idtoken>',
+        type: '<Configured masterpass_idtoken_type>'
+      }
+    });
+    const transactionEventResponse = await chargingStation.sendRequest(transactionEventRequest);
+    if (transactionEventResponse.idTokenInfo.status !== 'Accepted') {
+      throw new Error('Transaction stop failed');
+    }
+
+    // Step 4: Execute Reusable State EVConnectedPostSession
+    await chargingStation.executeReusableState('EVConnectedPostSession');
+
+    // Step 5: Execute Reusable State EVDisconnected
+    await chargingStation.executeReusableState('EVDisconnected');
+
+    // Step 6: Execute Reusable State ParkingBayUnoccupied
+    await chargingStation.executeReusableState('ParkingBayUnoccupied');
+
+    console.log('Test scenario executed successfully');
+  } catch (error) {
+    console.error('Error executing test scenario:', error);
+  }
+}
+
+main();
