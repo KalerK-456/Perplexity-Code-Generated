@@ -1,0 +1,135 @@
+import { OCPPChargePoint, AuthorizeRequest, AuthorizeResponse, TransactionEventRequest, TransactionEventResponse } from 'ocpp-ts'; // Assuming an OCPP TypeScript library
+
+class ChargingStation {
+    private cp: OCPPChargePoint;
+    private authCache: Map<string, boolean> = new Map();
+    private isOffline: boolean = false;
+
+    constructor() {
+        this.cp = new OCPPChargePoint('CP001'); // Initialize with Charge Point ID
+        this.setupConfig();
+        this.setupEventHandlers();
+    }
+
+    private setupConfig() {
+        // Set up configuration as per test scenario
+        this.cp.setConfig('AuthCacheEnabled', true);
+        this.cp.setConfig('LocalPreAuthorize', true);
+        this.cp.setConfig('LocalAuthorizeOffline', true);
+        this.cp.setConfig('StopTxOnInvalidId', false);
+        this.cp.setConfig('MaxEnergyOnInvalidId', 500);
+        this.cp.setConfig('OfflineTxForUnknownIdEnabled', true);
+        this.cp.setConfig('OfflineThreshold', 360); // Assuming RetryBackOffWaitMinimum is 300
+        this.cp.setConfig('RetryBackOffWaitMinimum', 300);
+        this.cp.setConfig('RetryBackOffRandomRange', 0);
+    }
+
+    private setupEventHandlers() {
+        this.cp.on('Authorize', this.handleAuthorize.bind(this));
+        this.cp.on('TransactionEvent', this.handleTransactionEvent.bind(this));
+    }
+
+    private async handleAuthorize(req: AuthorizeRequest): Promise<AuthorizeResponse> {
+        if (this.isOffline) {
+            // Use cached authorization
+            const isAuthorized = this.authCache.get(req.idToken.idToken) || false;
+            return { idTokenInfo: { status: isAuthorized ? 'Accepted' : 'Invalid' } };
+        }
+        // In online mode, forward to CSMS (not implemented in this example)
+        return { idTokenInfo: { status: 'Accepted' } };
+    }
+
+    private async handleTransactionEvent(req: TransactionEventRequest): Promise<TransactionEventResponse> {
+        if (this.isOffline) {
+            // Handle offline transaction event
+            return { idTokenInfo: { status: 'Accepted' } };
+        }
+        // In online mode, forward to CSMS (not implemented in this example)
+        return { idTokenInfo: { status: 'Accepted' } };
+    }
+
+    public async runTestScenario() {
+        console.log("Starting test scenario");
+
+        // Step 1: Disconnect WebSocket
+        this.isOffline = true;
+        console.log("WebSocket disconnected. Charging Station is offline.");
+
+        // Simulate presenting a valid idToken
+        const validIdToken = { idToken: "valid_token", type: "ISO14443" };
+        await this.simulateIdTokenPresentation(validIdToken);
+
+        // Wait for configured transaction duration
+        await this.wait(5000); // Simulating 5 seconds wait
+
+        // Step 2: Reconnect WebSocket
+        this.isOffline = false;
+        console.log("WebSocket reconnected. Charging Station is online.");
+
+        // Step 3-6: Send TransactionEventRequests
+        await this.sendTransactionEvents();
+
+        console.log("Test scenario completed");
+    }
+
+    private async simulateIdTokenPresentation(idToken: { idToken: string, type: string }) {
+        const authRequest: AuthorizeRequest = { idToken };
+        const authResponse = await this.handleAuthorize(authRequest);
+        console.log("Authorization response:", authResponse);
+
+        if (authResponse.idTokenInfo.status === 'Accepted') {
+            const transactionEvent: TransactionEventRequest = {
+                eventType: 'Started',
+                timestamp: new Date().toISOString(),
+                triggerReason: 'Authorized',
+                seqNo: 0,
+                idToken,
+                transactionInfo: { transactionId: 'trans_1' }
+            };
+            await this.handleTransactionEvent(transactionEvent);
+        }
+    }
+
+    private async sendTransactionEvents() {
+        // Send TransactionEventRequest for authorization
+        const authEvent: TransactionEventRequest = {
+            eventType: 'Updated',
+            timestamp: new Date().toISOString(),
+            triggerReason: 'Authorized',
+            seqNo: 1,
+            transactionInfo: { transactionId: 'trans_1' }
+        };
+        await this.handleTransactionEvent(authEvent);
+
+        // Send TransactionEventRequest for charging state change
+        const chargingEvent: TransactionEventRequest = {
+            eventType: 'Updated',
+            timestamp: new Date().toISOString(),
+            triggerReason: 'ChargingStateChanged',
+            seqNo: 2,
+            transactionInfo: { transactionId: 'trans_1', chargingState: 'Charging' }
+        };
+        await this.handleTransactionEvent(chargingEvent);
+
+        // Simulate CSMS sending Invalid status
+        console.log("CSMS responds with Invalid status");
+
+        // Send TransactionEventRequest for deauthorization
+        const deauthEvent: TransactionEventRequest = {
+            eventType: 'Updated',
+            timestamp: new Date().toISOString(),
+            triggerReason: 'Deauthorized',
+            seqNo: 3,
+            transactionInfo: { transactionId: 'trans_1' }
+        };
+        await this.handleTransactionEvent(deauthEvent);
+    }
+
+    private wait(ms: number): Promise<void> {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+}
+
+// Run the test scenario
+const chargingStation = new ChargingStation();
+chargingStation.runTestScenario().catch(console.error);
