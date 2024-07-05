@@ -1,0 +1,62 @@
+import { CentralSystem, ChargingStation } from 'ocpp-js';
+
+// Configuration constants
+const validIdToken = 'VALID_ID_TOKEN';
+const invalidIdToken = 'INVALID_ID_TOKEN';
+const transactionTimeout = 30000; // 30 seconds
+
+// Initialize Central System and Charging Station
+const centralSystem = new CentralSystem();
+const chargingStation = new ChargingStation('ws://localhost:9220');
+
+// Event Handlers
+chargingStation.on('Authorize', (request) => {
+    if (request.idToken === validIdToken) {
+        return { idTokenInfo: { status: 'Accepted' } };
+    } else {
+        return { idTokenInfo: { status: 'Invalid' } };
+    }
+});
+
+chargingStation.on('TransactionEvent', (request) => {
+    if (request.triggerReason === 'Authorized') {
+        console.log('Transaction started');
+    } else if (request.triggerReason === 'Deauthorized') {
+        console.log('Transaction deauthorized');
+    }
+    return { status: 'Accepted' };
+});
+
+// Test Scenario
+async function runTestScenario() {
+    // Step 1: Authorize with a valid idToken
+    const authorizeResponse = await chargingStation.send('Authorize', { idToken: validIdToken });
+    console.log('Authorize Response:', authorizeResponse);
+
+    if (authorizeResponse.idTokenInfo.status !== 'Accepted') {
+        throw new Error('Authorization failed');
+    }
+
+    // Step 2: Start a transaction
+    const transactionEventResponse = await chargingStation.send('TransactionEvent', {
+        eventType: 'Started',
+        triggerReason: 'Authorized',
+        idToken: validIdToken,
+        timestamp: new Date().toISOString(),
+        transactionInfo: { transactionId: 1 }
+    });
+    console.log('TransactionEvent Response:', transactionEventResponse);
+
+    // Step 3: Wait for the cable plugin timeout
+    setTimeout(async () => {
+        const stopTransactionResponse = await chargingStation.send('TransactionEvent', {
+            eventType: 'Ended',
+            triggerReason: 'Timeout',
+            transactionInfo: { transactionId: 1, stoppedReason: 'Timeout' }
+        });
+        console.log('Stop Transaction Response:', stopTransactionResponse);
+    }, transactionTimeout);
+}
+
+// Run the test scenario
+runTestScenario().catch(console.error);
