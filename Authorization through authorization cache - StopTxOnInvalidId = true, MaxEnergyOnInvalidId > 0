@@ -1,0 +1,53 @@
+import { ChargingStation, OCTT, ReusableState } from './ocpp-test-framework';
+
+async function runTest() {
+  const chargingStation = new ChargingStation();
+  const octt = new OCTT();
+  
+  // Configuration
+  chargingStation.configure({
+    AuthCacheEnabled: true,
+    LocalPreAuthorize: true,
+    LocalAuthorizeOffline: true,
+    StopTxOnInvalidId: true,
+    MaxEnergyOnInvalidId: 500,
+    OfflineThreshold: octt.getConfiguredRetryBackOffWaitMinimum() + 60.0,
+    RetryBackOffWaitMinimum: octt.getConfiguredRetryBackOffWaitMinimum(),
+    RetryBackOffRandomRange: 0
+  });
+
+  // Set up initial state
+  await ReusableState.setEVConnectedPreSession(chargingStation);
+
+  // Test scenario
+  octt.closeWebSocketConnection();
+  octt.doNotAcceptReconnect();
+
+  // Manual action: Present valid idToken which is already configured in the Authorization Cache
+  chargingStation.presentIdToken(octt.getConfiguredValidIdToken());
+
+  // Wait for configured transaction duration
+  await octt.wait(octt.getConfiguredTransactionDuration());
+
+  octt.acceptReconnectionAttempt();
+
+  // Charging Station empties its Transaction message queue
+  const transactionEventRequests = await chargingStation.emptyTransactionMessageQueue();
+
+  for (const request of transactionEventRequests) {
+    const response = await octt.respondToTransactionEventRequest(request);
+    if (request.idToken) {
+      response.idTokenInfo = { status: 'Invalid' };
+    }
+    await chargingStation.receiveTransactionEventResponse(response);
+  }
+
+  const deauthorizedRequest = await chargingStation.sendTransactionEventRequest({
+    triggerReason: 'Deauthorized',
+    offline: false
+  });
+
+  await octt.respondToTransactionEventRequest(deauthorizedRequest);
+}
+
+runTest().catch(console.error);
