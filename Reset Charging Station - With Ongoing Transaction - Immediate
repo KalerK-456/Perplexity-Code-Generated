@@ -1,0 +1,101 @@
+// Import necessary OCPP types and utilities
+import { OCPPCommands, OCPPResponses, OCPPEvents } from 'ocpp-js'; // Assuming 'ocpp-js' is a library for OCPP
+
+// Define the test scenario
+async function resetChargingStationWithOngoingTransactionImmediate() {
+    // Step 1: OCTT sends ResetRequest with type Immediate
+    const resetRequest = {
+        type: 'Immediate'
+    };
+    const resetResponse = await sendOCPPCommand(OCPPCommands.Reset, resetRequest);
+    console.log('ResetResponse:', resetResponse);
+
+    // Validate ResetResponse
+    if (resetResponse.status !== 'Accepted') {
+        throw new Error('Reset request was not accepted');
+    }
+
+    // Step 2: Charging Station sends TransactionEventRequest to end the ongoing transaction
+    const transactionEventRequest = await waitForOCPPEvent(OCPPEvents.TransactionEvent);
+    console.log('TransactionEventRequest:', transactionEventRequest);
+
+    // Validate TransactionEventRequest
+    if (transactionEventRequest.eventType !== 'Ended' || transactionEventRequest.triggerReason !== 'ResetCommand') {
+        throw new Error('Unexpected TransactionEventRequest');
+    }
+
+    // Step 3: OCTT responds with TransactionEventResponse
+    const transactionEventResponse = {
+        status: 'Accepted'
+    };
+    await sendOCPPResponse(OCPPResponses.TransactionEvent, transactionEventResponse);
+
+    // Step 4: Charging Station reboots and sends BootNotificationRequest
+    const bootNotificationRequest = await waitForOCPPEvent(OCPPEvents.BootNotification);
+    console.log('BootNotificationRequest:', bootNotificationRequest);
+
+    // Validate BootNotificationRequest
+    if (bootNotificationRequest.reason !== 'RemoteReset') {
+        throw new Error('Unexpected BootNotificationRequest reason');
+    }
+
+    // Step 5: OCTT responds with BootNotificationResponse with status Accepted
+    const bootNotificationResponse = {
+        status: 'Accepted'
+    };
+    await sendOCPPResponse(OCPPResponses.BootNotification, bootNotificationResponse);
+
+    // Step 6: Charging Station notifies the CSMS about the current state of all connectors
+    const statusNotificationRequests = await waitForMultipleOCPPEvents(OCPPEvents.StatusNotification);
+    console.log('StatusNotificationRequests:', statusNotificationRequests);
+
+    // Validate StatusNotificationRequests
+    statusNotificationRequests.forEach(request => {
+        if (!['Available', 'Occupied'].includes(request.connectorStatus)) {
+            throw new Error('Unexpected connector status');
+        }
+    });
+
+    // Step 7: OCTT responds accordingly to the notifications
+    const statusNotificationResponses = statusNotificationRequests.map(() => ({ status: 'Accepted' }));
+    await sendMultipleOCPPResponses(OCPPResponses.StatusNotification, statusNotificationResponses);
+
+    console.log('Test scenario completed successfully');
+}
+
+// Utility functions to simulate OCPP communication
+async function sendOCPPCommand(command: string, payload: any): Promise<any> {
+    // Simulate sending an OCPP command and receiving a response
+    return new Promise(resolve => setTimeout(() => resolve({ status: 'Accepted' }), 1000));
+}
+
+async function waitForOCPPEvent(event: string): Promise<any> {
+    // Simulate waiting for an OCPP event
+    return new Promise(resolve => setTimeout(() => resolve({
+        eventType: 'Ended',
+        triggerReason: 'ResetCommand',
+        reason: 'RemoteReset',
+        connectorStatus: 'Available'
+    }), 2000));
+}
+
+async function waitForMultipleOCPPEvents(event: string): Promise<any[]> {
+    // Simulate waiting for multiple OCPP events
+    return new Promise(resolve => setTimeout(() => resolve([
+        { connectorStatus: 'Available' },
+        { connectorStatus: 'Occupied' }
+    ]), 3000));
+}
+
+async function sendOCPPResponse(responseType: string, payload: any): Promise<void> {
+    // Simulate sending an OCPP response
+    return new Promise(resolve => setTimeout(resolve, 500));
+}
+
+async function sendMultipleOCPPResponses(responseType: string, payloads: any[]): Promise<void> {
+    // Simulate sending multiple OCPP responses
+    return new Promise(resolve => setTimeout(resolve, 500));
+}
+
+// Execute the test scenario
+resetChargingStationWithOngoingTransactionImmediate().catch(error => console.error('Test scenario failed:', error));
