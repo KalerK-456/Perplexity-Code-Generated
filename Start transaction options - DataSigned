@@ -1,0 +1,75 @@
+import { ChargingStation, CSMS, TransactionEventRequest, TransactionEventResponse } from 'ocpp-ts';
+
+async function main() {
+  const chargingStation = new ChargingStation();
+  const csms = new CSMS();
+
+  // 1. Execute Reusable State EVConnectedPreSession
+  await chargingStation.executeReusableState('EVConnectedPreSession');
+
+  // Manual Action: Present valid idToken
+  console.log("Manual Action: Present valid idToken");
+
+  // 2. The Charging Station sends a TransactionEventRequest
+  const transactionEventRequest: TransactionEventRequest = {
+    eventType: 'Started',
+    triggerReason: 'Authorized',
+    seqNo: 0,
+    transactionInfo: {
+      transactionId: 'transaction1',
+      chargingState: 'EVConnected'
+    },
+    idToken: {
+      idToken: 'validIdToken123',
+      type: 'ISO14443'
+    },
+    timestamp: new Date().toISOString()
+  };
+  
+  await chargingStation.send(transactionEventRequest);
+
+  // 3. The OCTT responds with a TransactionEventResponse
+  const transactionEventResponse: TransactionEventResponse = {
+    totalCost: 0,
+    chargingPriority: 0,
+    idTokenInfo: {
+      status: 'Accepted'
+    }
+  };
+  
+  await csms.send(transactionEventResponse);
+
+  // 4. Execute Reusable State EnergyTransferStarted
+  await chargingStation.executeReusableState('EnergyTransferStarted');
+
+  // 5. The Charging Station sends a TransactionEventRequest
+  const updatedTransactionEventRequest: TransactionEventRequest = {
+    eventType: 'Updated',
+    triggerReason: 'SignedDataReceived',
+    seqNo: 1,
+    transactionInfo: {
+      transactionId: 'transaction1',
+      chargingState: 'Charging'
+    },
+    idToken: {
+      idToken: 'validIdToken123',
+      type: 'ISO14443'
+    },
+    timestamp: new Date().toISOString()
+  };
+  
+  await chargingStation.send(updatedTransactionEventRequest);
+
+  // 6. The OCTT responds with a TransactionEventResponse
+  const updatedTransactionEventResponse: TransactionEventResponse = {
+    totalCost: 0,
+    chargingPriority: 0,
+    idTokenInfo: {
+      status: 'Accepted'
+    }
+  };
+  
+  await csms.send(updatedTransactionEventResponse);
+}
+
+main().catch(console.error);
