@@ -1,0 +1,58 @@
+import { ChargePoint, OCPP } from 'ocpp-ts';
+
+async function testStopTransactionWithMasterPass(chargePoint: ChargePoint) {
+
+  // 1. Present configured master pass idToken
+  const masterPassIdToken = {
+    idToken: 'configured_master_pass_id',
+    type: 'ISO14443'
+  };
+  
+  // 2. Send AuthorizeRequest
+  const authorizeRequest: OCPP.AuthorizeRequest = {
+    idToken: masterPassIdToken
+  };
+  const authorizeResponse = await chargePoint.authorize(authorizeRequest);
+  
+  // 3. Validate AuthorizeResponse
+  if (authorizeResponse.idTokenInfo.status !== 'Accepted' ||
+      authorizeResponse.idTokenInfo.groupIdToken?.idToken !== 'configured_master_pass_group_id') {
+    throw new Error('Invalid AuthorizeResponse');
+  }
+
+  // 4. Simulate user selecting to stop transaction on EVSE 1
+  const evseId = 1;
+
+  // 5. Send TransactionEventRequest
+  const transactionEventRequest: OCPP.TransactionEventRequest = {
+    eventType: 'Updated',
+    timestamp: new Date().toISOString(),
+    triggerReason: 'StopAuthorized',
+    seqNo: 1,
+    transactionInfo: {
+      transactionId: 'ongoing_transaction_id',
+      stoppedReason: 'MasterPass'
+    },
+    evse: {
+      id: evseId
+    }
+  };
+  const transactionEventResponse = await chargePoint.transactionEvent(transactionEventRequest);
+
+  // 6. Validate TransactionEventResponse  
+  if (transactionEventResponse.idTokenInfo?.status !== 'Accepted' ||
+      transactionEventResponse.idTokenInfo?.groupIdToken?.idToken !== 'configured_master_pass_group_id') {
+    throw new Error('Invalid TransactionEventResponse');
+  }
+
+  // 7. Execute post-transaction states
+  await chargePoint.executeState('EVConnectedPostSession');
+  await chargePoint.executeState('EVDisconnected');
+  await chargePoint.executeState('ParkingBayUnoccupied');
+
+  console.log('Stop Transaction with Master Pass test completed successfully');
+}
+
+// Usage
+const chargePoint = new ChargePoint(/* config */);
+testStopTransactionWithMasterPass(chargePoint);
