@@ -1,0 +1,77 @@
+import { OCPPChargePoint, AuthorizeRequest, AuthorizeResponse, TransactionEventRequest, TransactionEventResponse } from 'ocpp-ts';
+
+class ChargingStation extends OCPPChargePoint {
+  async stopTransactionWithMasterPass(): Promise<void> {
+    try {
+      // Step 1: Present configured masterpass idToken
+      const authorizeRequest: AuthorizeRequest = {
+        idToken: {
+          idToken: 'configured_masterpass_idtoken',
+          type: 'ISO14443'
+        }
+      };
+
+      // Step 2: Send AuthorizeRequest
+      const authorizeResponse: AuthorizeResponse = await this.authorize(authorizeRequest);
+
+      if (authorizeResponse.idTokenInfo.status !== 'Accepted') {
+        throw new Error('Master Pass authorization failed');
+      }
+
+      // Step 3: User selects to stop all transactions
+      await this.simulateUserStopAllTransactions();
+
+      // Step 4: Send TransactionEventRequest for all EVSEs
+      const evseIds = await this.getAllEvseIds();
+      for (const evseId of evseIds) {
+        const transactionEventRequest: TransactionEventRequest = {
+          eventType: 'Ended',
+          timestamp: new Date().toISOString(),
+          triggerReason: 'StopAuthorized',
+          seqNo: 0,
+          transactionInfo: {
+            transactionId: `transaction_${evseId}`,
+            chargingState: 'EVConnected',
+            timeSpentCharging: 0,
+            stoppedReason: 'MasterPass',
+            evse: { id: evseId }
+          }
+        };
+
+        const transactionEventResponse: TransactionEventResponse = await this.transactionEvent(transactionEventRequest);
+
+        if (transactionEventResponse.idTokenInfo?.status !== 'Accepted') {
+          console.warn(`Transaction stop not accepted for EVSE ${evseId}`);
+        }
+      }
+
+      // Step 5-7: Execute post-transaction states
+      await this.executePostTransactionStates();
+
+    } catch (error) {
+      console.error('Error in stopTransactionWithMasterPass:', error);
+    }
+  }
+
+  private async simulateUserStopAllTransactions(): Promise<void> {
+    // Simulate user interaction to stop all transactions
+    console.log('User selected to stop all transactions');
+  }
+
+  private async getAllEvseIds(): Promise<number[]> {
+    // In a real implementation, this would return actual EVSE IDs
+    return [1, 2, 3];
+  }
+
+  private async executePostTransactionStates(): Promise<void> {
+    console.log('Executing post-transaction states');
+    // Implement the following states:
+    // 5. EVConnectedPostSession for all EVSEs
+    // 6. EVDisconnected for all EVSEs
+    // 7. ParkingBayUnoccupied for all EVSEs
+  }
+}
+
+// Usage
+const chargingStation = new ChargingStation(/* connection details */);
+chargingStation.stopTransactionWithMasterPass();
