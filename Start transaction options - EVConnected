@@ -1,0 +1,73 @@
+// Import necessary modules and types
+import { ChargingStation, CSMS, TransactionEventRequest, AuthorizeRequest, AuthorizeResponse, StatusNotificationRequest, NotifyEventRequest } from 'ocpp-types'; // Assuming these types are defined in ocpp-types module
+
+// Mock objects for Charging Station and CSMS
+const chargingStation = new ChargingStation();
+const csms = new CSMS();
+
+// Configuration and state setup
+const txStartPoint = ['EVConnected']; // Ensure TxStartPoint includes EVConnected
+
+// Function to simulate the EV connection
+async function connectEV() {
+    // Simulate the EV connection
+    await chargingStation.connectEV();
+    // Notify CSMS about the status change
+    const statusNotification: StatusNotificationRequest = {
+        connectorStatus: 'Occupied',
+        evseId: 1,
+        connectorId: 1,
+    };
+    await csms.sendStatusNotification(statusNotification);
+}
+
+// Function to handle the authorization process
+async function authorizeTransaction() {
+    // Send AuthorizeRequest to CSMS
+    const authorizeRequest: AuthorizeRequest = {
+        idToken: {
+            idToken: 'valid_id_token',
+            type: 'RFID',
+        },
+    };
+    const authorizeResponse: AuthorizeResponse = await csms.sendAuthorizeRequest(authorizeRequest);
+
+    // Check if authorization is accepted
+    if (authorizeResponse.idTokenInfo.status === 'Accepted') {
+        // Send TransactionEventRequest to start the transaction
+        const transactionEventRequest: TransactionEventRequest = {
+            eventType: 'Started',
+            triggerReason: 'Authorized',
+            idToken: authorizeRequest.idToken,
+            evse: {
+                id: 1,
+                connectorId: 1,
+            },
+            transactionInfo: {
+                chargingState: 'Charging',
+            },
+        };
+        await csms.sendTransactionEventRequest(transactionEventRequest);
+    } else {
+        throw new Error('Authorization failed');
+    }
+}
+
+// Main test scenario function
+async function mainTestScenario() {
+    try {
+        // Step 1: Execute Reusable State EVConnectedPreSession
+        await connectEV();
+
+        // Step 2: Send AuthorizeRequest and handle the response
+        await authorizeTransaction();
+
+        // Post scenario validations (if any)
+        console.log('Transaction started successfully');
+    } catch (error) {
+        console.error('Test scenario failed:', error);
+    }
+}
+
+// Execute the main test scenario
+mainTestScenario();
