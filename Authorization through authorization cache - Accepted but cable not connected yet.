@@ -1,0 +1,79 @@
+import WebSocket from 'ws';
+
+// Define the necessary types and interfaces
+interface IdToken {
+    idToken: string;
+    type: string;
+}
+
+interface TransactionEventRequest {
+    eventType: string;
+    triggerReason: string;
+    idToken?: IdToken;
+    evseId: number;
+    connectorId: number;
+    transactionInfo: {
+        transactionId: string;
+        chargingState: string;
+    };
+}
+
+interface TransactionEventResponse {
+    idTokenInfo: {
+        status: string;
+    };
+}
+
+// Configuration
+const wsUrl = 'ws://localhost:8080/ocpp'; // Replace with actual CSMS URL
+const idToken: IdToken = {
+    idToken: 'valid_id_token',
+    type: 'RFID'
+};
+const evseId = 1;
+const connectorId = 1;
+const transactionId = 'tx12345';
+
+// Create a WebSocket connection to the CSMS
+const ws = new WebSocket(wsUrl);
+
+ws.on('open', () => {
+    console.log('Connected to CSMS');
+
+    // Simulate presenting the idToken
+    const transactionEventRequest: TransactionEventRequest = {
+        eventType: 'Started',
+        triggerReason: 'Authorized',
+        idToken: idToken,
+        evseId: evseId,
+        connectorId: connectorId,
+        transactionInfo: {
+            transactionId: transactionId,
+            chargingState: 'Idle' // Cable not connected yet
+        }
+    };
+
+    // Send the TransactionEventRequest to the CSMS
+    ws.send(JSON.stringify(transactionEventRequest));
+    console.log('TransactionEventRequest sent:', transactionEventRequest);
+});
+
+ws.on('message', (data) => {
+    const response: TransactionEventResponse = JSON.parse(data.toString());
+    console.log('TransactionEventResponse received:', response);
+
+    if (response.idTokenInfo.status === 'Accepted') {
+        console.log('Authorization accepted, but cable not connected yet.');
+        // Further actions can be implemented here, such as waiting for the cable to be connected
+    } else {
+        console.error('Authorization failed:', response.idTokenInfo.status);
+    }
+});
+
+ws.on('close', () => {
+    console.log('Connection closed');
+});
+
+ws.on('error', (error) => {
+    console.error('WebSocket error:', error);
+});
