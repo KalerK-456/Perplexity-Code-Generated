@@ -1,0 +1,59 @@
+import { ChargingStation, OCTT, EVSEStatus, TransactionEventRequest, TransactionEventResponse } from './ocpp-types';
+
+async function main() {
+  const chargingStation = new ChargingStation();
+  const octt = new OCTT();
+
+  // Configuration State
+  chargingStation.setConfig('TxStopPoint', ['EnergyTransfer']);
+
+  // Reusable State
+  await chargingStation.setState('EnergyTransferStarted');
+
+  // Main Test Scenario
+  console.log("Starting test scenario...");
+
+  // Step 1: Manual Action - Unplug the cable from the EV
+  console.log("Manual Action: Unplug the cable from the EV");
+
+  // Step 2: Charging Station sends TransactionEventRequest
+  const transactionEventRequest: TransactionEventRequest = await chargingStation.sendTransactionEventRequest({
+    eventType: 'Updated',
+    triggerReason: 'EVDetached',
+    seqNo: 0,
+    transactionInfo: {
+      transactionId: 'transaction1',
+      chargingState: 'SuspendedEV'
+    }
+  });
+
+  // Step 3: OCTT responds with TransactionEventResponse
+  const transactionEventResponse: TransactionEventResponse = await octt.sendTransactionEventResponse({
+    totalCost: 0,
+    chargingPriority: 0
+  });
+
+  // Step 4: Execute Reusable State EVConnectedPostSession
+  await chargingStation.setState('EVConnectedPostSession');
+
+  // Tool validations
+  console.log("Performing tool validations...");
+  
+  if (transactionEventRequest.eventType !== 'Updated') {
+    throw new Error('Invalid eventType in TransactionEventRequest');
+  }
+  
+  if (transactionEventRequest.triggerReason !== 'EVDetached') {
+    throw new Error('Invalid triggerReason in TransactionEventRequest');
+  }
+  
+  if (transactionEventRequest.transactionInfo?.chargingState !== 'SuspendedEV') {
+    throw new Error('Invalid chargingState in TransactionEventRequest');
+  }
+
+  console.log("Test scenario completed successfully.");
+}
+
+main().catch(error => {
+  console.error("Test scenario failed:", error);
+});
