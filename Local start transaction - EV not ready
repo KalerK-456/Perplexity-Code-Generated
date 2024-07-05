@@ -1,0 +1,71 @@
+import { OCPPClient, OCPPCommands, OCPPError, OCPPErrorType } from 'ocpp-js';
+
+const ocppClient = new OCPPClient({
+  endpoint: 'ws://localhost:8080/ocpp', // Replace with your CSMS endpoint
+  chargePointId: 'CP_1',
+  ocppVersion: '2.0.1',
+});
+
+async function main() {
+  try {
+    // Connect to the CSMS
+    await ocppClient.connect();
+
+    // Step 1: Present invalid idToken
+    const invalidIdToken = 'invalid_id_token';
+    const authorizeRequest = new OCPPCommands.AuthorizeRequest({
+      idToken: {
+        idToken: invalidIdToken,
+        type: 'RFID',
+      },
+    });
+
+    // Send AuthorizeRequest
+    const authorizeResponse = await ocppClient.send(authorizeRequest);
+
+    // Check the response status
+    if (authorizeResponse.idTokenInfo.status === 'Invalid' || authorizeResponse.idTokenInfo.status === 'Unknown') {
+      console.log('Authorization failed: Invalid or Unknown idToken');
+      return;
+    }
+
+    // Step 2: Attempt to start a transaction
+    const transactionEventRequest = new OCPPCommands.TransactionEventRequest({
+      eventType: 'Started',
+      triggerReason: 'Authorized',
+      idToken: {
+        idToken: invalidIdToken,
+        type: 'RFID',
+      },
+      evse: {
+        id: 1,
+        connectorId: 1,
+      },
+      timestamp: new Date().toISOString(),
+      meterStart: 0,
+    });
+
+    // Send TransactionEventRequest
+    const transactionEventResponse = await ocppClient.send(transactionEventRequest);
+
+    // Check the response status
+    if (transactionEventResponse.idTokenInfo.status === 'Invalid' || transactionEventResponse.idTokenInfo.status === 'Unknown') {
+      console.log('Transaction start failed: Invalid or Unknown idToken');
+      return;
+    }
+
+    console.log('Transaction started successfully');
+  } catch (error) {
+    if (error instanceof OCPPError) {
+      console.error(`OCPP Error: ${error.errorType} - ${error.message}`);
+    } else {
+      console.error(`Error: ${error.message}`);
+    }
+  } finally {
+    // Disconnect from the CSMS
+    await ocppClient.disconnect();
+  }
+}
+
+// Run the main function
+main();
