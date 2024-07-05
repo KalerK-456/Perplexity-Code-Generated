@@ -1,0 +1,50 @@
+import { ChargingStation, OCTT } from './ocpp-types';
+
+async function main() {
+  const chargingStation = new ChargingStation();
+  const octt = new OCTT();
+
+  // Manual Action: Present valid idToken
+  await chargingStation.presentIdToken('<Configured valid_idtoken_idtoken>');
+
+  // Step 1: The Charging Station sends an AuthorizeRequest
+  const authorizeRequest = await chargingStation.sendAuthorizeRequest({
+    idToken: {
+      idToken: '<Configured valid_idtoken_idtoken>',
+      type: '<Configured valid_idtoken_type>'
+    }
+  });
+
+  // Step 2: The OCTT responds with an AuthorizeResponse
+  const authorizeResponse = await octt.sendAuthorizeResponse({
+    idTokenInfo: {
+      status: 'Accepted'
+    }
+  });
+
+  // Step 3: Execute Reusable State ParkingBayOccupied
+  await chargingStation.executeReusableState('ParkingBayOccupied');
+
+  // Step 4: The Charging Station sends a TransactionEventRequest
+  const transactionEventRequest = await chargingStation.sendTransactionEventRequest({
+    eventType: 'Started',
+    triggerReason: 'Authorized',
+    seqNo: 0,
+    idToken: {
+      idToken: '<Configured valid_idtoken_idtoken>',
+      type: '<Configured valid_idtoken_type>'
+    },
+    timestamp: new Date().toISOString()
+  });
+
+  // Step 5: The OCTT responds with a TransactionEventResponse
+  const transactionEventResponse = await octt.sendTransactionEventResponse({
+    idTokenInfo: {
+      status: 'Accepted'
+    }
+  });
+
+  // Tool validations and post-scenario validations would be implemented here
+}
+
+main().catch(error => console.error('Test failed:', error));
