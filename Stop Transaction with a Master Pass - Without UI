@@ -1,0 +1,78 @@
+// Import necessary modules and types
+import { OCPPCommands, OCPPClient, OCPPMessageType, AuthorizeRequest, AuthorizeResponse, TransactionEventRequest, TransactionEventResponse } from 'ocpp-js';
+
+// Configuration for the test
+const masterPassIdToken = '<Configured masterpass_idtoken_idtoken>';
+const masterPassGroupId = '<Configured masterPassGroupId>';
+const evseIds = [1, 2]; // Assuming the Charging Station has two EVSEs
+
+// Create an instance of the OCPP client
+const client = new OCPPClient('ws://localhost:8080/ocpp', 'ChargingStation1');
+
+// Function to simulate the test scenario
+async function stopTransactionWithMasterPass() {
+    try {
+        // Step 1: Present configured masterpass idToken
+        const authorizeRequest: AuthorizeRequest = {
+            idToken: {
+                idToken: masterPassIdToken,
+                type: 'ISO14443'
+            }
+        };
+        console.log('Sending AuthorizeRequest:', authorizeRequest);
+        const authorizeResponse: AuthorizeResponse = await client.send(OCPPCommands.Authorize, authorizeRequest);
+        console.log('Received AuthorizeResponse:', authorizeResponse);
+
+        if (authorizeResponse.idTokenInfo.status !== 'Accepted') {
+            throw new Error('Authorization failed');
+        }
+
+        // Step 2: Stop transactions on all EVSEs
+        for (const evseId of evseIds) {
+            const transactionEventRequest: TransactionEventRequest = {
+                eventType: 'Ended',
+                timestamp: new Date().toISOString(),
+                triggerReason: 'RemoteStop',
+                seqNo: 0,
+                transactionInfo: {
+                    transactionId: `transaction-${evseId}`,
+                    stoppedReason: 'MasterPass'
+                },
+                evse: {
+                    id: evseId
+                }
+            };
+            console.log('Sending TransactionEventRequest for EVSE:', evseId);
+            const transactionEventResponse: TransactionEventResponse = await client.send(OCPPCommands.TransactionEvent, transactionEventRequest);
+            console.log('Received TransactionEventResponse for EVSE:', evseId, transactionEventResponse);
+
+            if (transactionEventResponse.idTokenInfo.status !== 'Accepted') {
+                throw new Error(`Stopping transaction failed for EVSE ${evseId}`);
+            }
+        }
+
+        // Step 3: Execute reusable states
+        await executeReusableState('EVConnectedPostSession');
+        await executeReusableState('EVDisconnected');
+        await executeReusableState('ParkingBayUnoccupied');
+
+        console.log('Test scenario completed successfully');
+    } catch (error) {
+        console.error('Error during test scenario:', error);
+    }
+}
+
+// Function to simulate executing reusable states
+async function executeReusableState(state: string) {
+    console.log(`Executing reusable state: ${state}`);
+    // Simulate the state execution logic here
+    // For example, sending status notifications or other OCPP messages
+}
+
+// Connect to the OCPP server and run the test scenario
+client.connect().then(() => {
+    console.log('Connected to OCPP server');
+    stopTransactionWithMasterPass();
+}).catch(error => {
+    console.error('Failed to connect to OCPP server:', error);
+});
