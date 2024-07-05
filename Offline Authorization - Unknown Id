@@ -1,0 +1,70 @@
+import { ChargingStation, CSMS, IdToken, TransactionEventRequest, TransactionEventResponse } from 'ocpp-2.0.1';
+
+async function testOfflineAuthorizationUnknownId(chargingStation: ChargingStation, csms: CSMS) {
+  // Configuration setup
+  chargingStation.setConfig('LocalAuthListEnabled', true);
+  chargingStation.setConfig('LocalPreAuthorize', true);
+  chargingStation.setConfig('OfflineTxForUnknownIdEnabled', true);
+  chargingStation.setConfig('LocalAuthorizeOffline', true);
+  chargingStation.setConfig('MaxEnergyOnInvalidId', 0);
+  chargingStation.setConfig('StopTxOnInvalidId', false);
+
+  // Set up initial state
+  await chargingStation.executeReusableState('StartOfflineTransaction');
+
+  // Simulate CSMS going offline
+  csms.goOffline();
+
+  // Step 1: Charging Station sends TransactionEventRequest(s)
+  const transactionEvents: TransactionEventRequest[] = await chargingStation.getTransactionEventQueue();
+  
+  // Step 2: CSMS responds with TransactionEventResponse
+  for (const event of transactionEvents) {
+    if (event.idToken) {
+      const response: TransactionEventResponse = {
+        idTokenInfo: {
+          status: 'Invalid'
+        }
+      };
+      await csms.sendTransactionEventResponse(response);
+    }
+  }
+
+  // Manual Action: Present valid idToken
+  const validIdToken: IdToken = {
+    idToken: 'valid_token_123',
+    type: 'ISO14443'
+  };
+  await chargingStation.presentIdToken(validIdToken);
+
+  // Manual Action: Unplug cable
+  await chargingStation.unplugCable();
+
+  // Step 3: Charging Station sends TransactionEventRequest with triggerReason StopAuthorized
+  const stopEvent = await chargingStation.waitForTransactionEvent('StopAuthorized');
+  
+  // Step 4: CSMS responds with TransactionEventResponse
+  await csms.sendTransactionEventResponse({});
+
+  // Execute additional reusable states
+  await chargingStation.executeReusableState('EVConnectedPostSession');
+  await chargingStation.executeReusableState('EVDisconnected');
+  await chargingStation.executeReusableState('ParkingBayUnoccupied');
+
+  // Perform tool validations
+  validateTransactionEventRequest(stopEvent);
+}
+
+function validateTransactionEventRequest(event: TransactionEventRequest) {
+  if (event.triggerReason !== 'StopAuthorized') {
+    throw new Error('Invalid triggerReason');
+  }
+  if (event.idToken?.idToken !== 'valid_token_123' || event.idToken?.type !== 'ISO14443') {
+    throw new Error('Invalid idToken');
+  }
+}
+
+// Run the test
+const chargingStation = new ChargingStation();
+const csms = new CSMS();
+testOfflineAuthorizationUnknownId(chargingStation, csms);
