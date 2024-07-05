@@ -1,0 +1,71 @@
+// Import necessary modules and types
+import { AuthorizeRequest, AuthorizeResponse, TransactionEventRequest, TransactionEventResponse, IdTokenInfo, IdTokenType } from 'ocpp-types';
+
+// Mock functions to simulate CSMS responses
+function sendAuthorizeRequest(idToken: string, type: IdTokenType): Promise<AuthorizeResponse> {
+    return new Promise((resolve) => {
+        const response: AuthorizeResponse = {
+            idTokenInfo: {
+                status: idToken === 'valid_idToken' ? 'Accepted' : 'Invalid',
+                groupIdToken: { idToken: 'groupIdToken' }
+            }
+        };
+        resolve(response);
+    });
+}
+
+function sendTransactionEventRequest(idToken: string, type: IdTokenType): Promise<TransactionEventResponse> {
+    return new Promise((resolve) => {
+        const response: TransactionEventResponse = {
+            idTokenInfo: {
+                status: 'Accepted',
+                groupIdToken: { idToken: 'groupIdToken' }
+            }
+        };
+        resolve(response);
+    });
+}
+
+// Main test scenario function
+async function testAuthorizationByGroupId() {
+    // Step 1: Present valid IdToken with configured GroupId
+    const validIdToken = 'valid_idToken';
+    const invalidIdToken = 'invalid_idToken';
+    const idTokenType: IdTokenType = 'RFID';
+
+    // Step 2: CS sends AuthorizeRequest for valid IdToken
+    let authorizeRequest: AuthorizeRequest = {
+        idToken: { idToken: validIdToken, type: idTokenType }
+    };
+    let authorizeResponse = await sendAuthorizeRequest(validIdToken, idTokenType);
+    console.log('AuthorizeResponse for valid IdToken:', authorizeResponse);
+
+    // Step 3: CSMS responds with AuthorizeResponse with status Accepted
+    if (authorizeResponse.idTokenInfo.status === 'Accepted') {
+        // Step 4: CS sends TransactionEventRequest
+        let transactionEventRequest: TransactionEventRequest = {
+            triggerReason: 'Authorized',
+            idToken: { idToken: validIdToken, type: idTokenType },
+            eventType: 'Started'
+        };
+        let transactionEventResponse = await sendTransactionEventRequest(validIdToken, idTokenType);
+        console.log('TransactionEventResponse for valid IdToken:', transactionEventResponse);
+    }
+
+    // Step 6: Present invalid IdToken with configured GroupId
+    authorizeRequest = {
+        idToken: { idToken: invalidIdToken, type: idTokenType }
+    };
+    authorizeResponse = await sendAuthorizeRequest(invalidIdToken, idTokenType);
+    console.log('AuthorizeResponse for invalid IdToken:', authorizeResponse);
+
+    // Step 8: CSMS responds with AuthorizeResponse with status Invalid
+    if (authorizeResponse.idTokenInfo.status === 'Invalid') {
+        console.log('Authorization for invalid IdToken correctly handled.');
+    } else {
+        console.error('Authorization for invalid IdToken failed.');
+    }
+}
+
+// Execute the test scenario
+testAuthorizationByGroupId();
