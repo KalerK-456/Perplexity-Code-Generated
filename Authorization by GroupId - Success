@@ -1,0 +1,112 @@
+import { ChargingStation, CSMS, IdToken, TransactionEventRequest, TransactionEventResponse } from 'ocpp-types';
+
+async function authorizationByGroupIdSuccess(chargingStation: ChargingStation, csms: CSMS) {
+  // Manual Action: Present valid idToken with <Configured GroupId>
+  console.log("Manual Action: Present valid idToken with <Configured GroupId>");
+
+  // Step 1: The Charging Station sends an AuthorizeRequest
+  const authorizeRequest = await chargingStation.sendAuthorizeRequest({
+    idToken: {
+      idToken: "<Configured valid_idtoken_idtoken>",
+      type: "<Configured valid_idtoken_type>"
+    }
+  });
+
+  // Step 2: The CSMS responds with an AuthorizeResponse
+  const authorizeResponse = await csms.sendAuthorizeResponse({
+    idTokenInfo: {
+      status: "Accepted",
+      groupIdToken: {
+        idToken: "<Configured groupIdToken>"
+      }
+    }
+  });
+
+  // Step 3: The Charging Station sends a TransactionEventRequest
+  const transactionEventRequest = await chargingStation.sendTransactionEventRequest({
+    eventType: "Started",
+    triggerReason: "Authorized",
+    seqNo: 0,
+    idToken: {
+      idToken: "<Configured valid_idtoken_idtoken>",
+      type: "<Configured valid_idtoken_type>"
+    },
+    timestamp: new Date().toISOString()
+  });
+
+  // Step 4: The CSMS responds with a TransactionEventResponse
+  const transactionEventResponse = await csms.sendTransactionEventResponse({
+    idTokenInfo: {
+      status: "Accepted",
+      groupIdToken: {
+        idToken: "<Configured groupIdToken>"
+      }
+    }
+  });
+
+  // Step 5: Execute Reusable State EnergyTransferStarted
+  await executeReusableState("EnergyTransferStarted", chargingStation, csms);
+
+  // Manual Action: Present other valid idToken with <Configured GroupId>
+  console.log("Manual Action: Present other valid idToken with <Configured GroupId>");
+
+  // Step 6: The Charging Station sends an AuthorizeRequest
+  const authorizeRequest2 = await chargingStation.sendAuthorizeRequest({
+    idToken: {
+      idToken: "<Configured valid_idtoken_idtoken>",
+      type: "<Configured valid_idtoken_type>"
+    }
+  });
+
+  // Step 7: The CSMS responds with an AuthorizeResponse
+  const authorizeResponse2 = await csms.sendAuthorizeResponse({
+    idTokenInfo: {
+      status: "Accepted",
+      groupIdToken: {
+        idToken: "<Configured groupIdToken>"
+      }
+    }
+  });
+
+  // Step 8: The Charging Station sends a TransactionEventRequest
+  const transactionEventRequest2 = await chargingStation.sendTransactionEventRequest({
+    eventType: "Updated",
+    triggerReason: "StopAuthorized",
+    seqNo: 1,
+    idToken: {
+      idToken: "<Configured valid_idtoken_idtoken>",
+      type: "<Configured valid_idtoken_type>"
+    },
+    timestamp: new Date().toISOString()
+  });
+
+  // Step 9: The CSMS responds with a TransactionEventResponse
+  const transactionEventResponse2 = await csms.sendTransactionEventResponse({
+    idTokenInfo: {
+      status: "Accepted",
+      groupIdToken: {
+        idToken: "<Configured groupIdToken>"
+      }
+    }
+  });
+
+  // Step 10: Execute Reusable State EVConnectedPostSession
+  await executeReusableState("EVConnectedPostSession", chargingStation, csms);
+
+  // Step 11: Execute Reusable State EVDisconnected
+  await executeReusableState("EVDisconnected", chargingStation, csms);
+
+  // Step 12: Execute Reusable State ParkingBayUnoccupied
+  await executeReusableState("ParkingBayUnoccupied", chargingStation, csms);
+}
+
+// Helper function to execute reusable states (implementation not provided)
+async function executeReusableState(stateName: string, chargingStation: ChargingStation, csms: CSMS) {
+  console.log(`Executing Reusable State: ${stateName}`);
+  // Implementation of reusable states would go here
+}
+
+// Example usage
+const chargingStation = new ChargingStation();
+const csms = new CSMS();
+authorizationByGroupIdSuccess(chargingStation, csms);
