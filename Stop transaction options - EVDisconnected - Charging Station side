@@ -1,0 +1,88 @@
+// Import necessary modules and types
+import { OCPPCommands, OCPPResponses, OCPPEvents } from 'ocpp-2.0.1-types'; // Hypothetical OCPP 2.0.1 TypeScript library
+
+// Define the main test scenario function
+async function testStopTransactionEVDisconnected() {
+    // Step 1: Execute Reusable State StopAuthorized for EVSE.id = 1
+    await executeStopAuthorized(1);
+
+    // Step 2: Execute Reusable State EVConnectedPostSession for EVSE.id = 1
+    await executeEVConnectedPostSession(1);
+
+    // Step 3: Execute Reusable State EVDisconnected for EVSE.id = 1
+    await executeEVDisconnected(1);
+
+    // Step 4: Execute Reusable State ParkingBayUnoccupied for EVSE.id = 1
+    await executeParkingBayUnoccupied(1);
+
+    // Step 5: Execute Reusable State StopAuthorized for EVSE.id = 2
+    await executeStopAuthorized(2);
+
+    // Step 6: Execute Reusable State EVConnectedPostSession for EVSE.id = 2
+    await executeEVConnectedPostSession(2);
+
+    // Step 7: Execute Reusable State EVDisconnected for EVSE.id = 2
+    await executeEVDisconnected(2);
+
+    // Step 8: Execute Reusable State ParkingBayUnoccupied for EVSE.id = 2
+    await executeParkingBayUnoccupied(2);
+
+    // Step 9: The Charging Station sends a BootNotificationRequest
+    const bootNotificationRequest: OCPPCommands.BootNotificationRequest = {
+        reason: 'ScheduledReset',
+        chargingStation: {
+            model: 'ModelX',
+            vendorName: 'VendorY'
+        }
+    };
+    const bootNotificationResponse: OCPPResponses.BootNotificationResponse = await sendBootNotification(bootNotificationRequest);
+
+    // Step 10: The Charging Station notifies the CSMS about the current state of all connectors
+    const statusNotificationRequest: OCPPCommands.StatusNotificationRequest = {
+        connectorId: 1,
+        status: 'Available',
+        errorCode: 'NoError'
+    };
+    await sendStatusNotification(statusNotificationRequest);
+
+    console.log('Test scenario executed successfully.');
+}
+
+// Helper functions to simulate the reusable states and OCPP commands
+async function executeStopAuthorized(evseId: number): Promise<void> {
+    console.log(`Executing StopAuthorized for EVSE.id = ${evseId}`);
+    // Simulate StopAuthorized state logic
+}
+
+async function executeEVConnectedPostSession(evseId: number): Promise<void> {
+    console.log(`Executing EVConnectedPostSession for EVSE.id = ${evseId}`);
+    // Simulate EVConnectedPostSession state logic
+}
+
+async function executeEVDisconnected(evseId: number): Promise<void> {
+    console.log(`Executing EVDisconnected for EVSE.id = ${evseId}`);
+    // Simulate EVDisconnected state logic
+}
+
+async function executeParkingBayUnoccupied(evseId: number): Promise<void> {
+    console.log(`Executing ParkingBayUnoccupied for EVSE.id = ${evseId}`);
+    // Simulate ParkingBayUnoccupied state logic
+}
+
+async function sendBootNotification(request: OCPPCommands.BootNotificationRequest): Promise<OCPPResponses.BootNotificationResponse> {
+    console.log('Sending BootNotificationRequest:', request);
+    // Simulate sending BootNotificationRequest and receiving response
+    return {
+        currentTime: new Date().toISOString(),
+        interval: 300,
+        status: 'Accepted'
+    };
+}
+
+async function sendStatusNotification(request: OCPPCommands.StatusNotificationRequest): Promise<void> {
+    console.log('Sending StatusNotificationRequest:', request);
+    // Simulate sending StatusNotificationRequest
+}
+
+// Execute the test scenario
+testStopTransactionEVDisconnected().catch(console.error);
