@@ -1,0 +1,122 @@
+// Import necessary modules and types
+import WebSocket from 'ws';
+import { v4 as uuidv4 } from 'uuid';
+
+// Define types for OCPP messages
+interface IdToken {
+  idToken: string;
+  type: string;
+}
+
+interface TransactionEventRequest {
+  eventType: string;
+  triggerReason: string;
+  transactionInfo: {
+    id: string;
+    chargingState: string;
+    stoppedReason?: string;
+  };
+  idToken?: IdToken;
+}
+
+interface TransactionEventResponse {
+  idTokenInfo: {
+    status: string;
+  };
+}
+
+// Configuration variables
+const STOP_TX_ON_INVALID_ID = false;
+const MAX_ENERGY_ON_INVALID_ID = 500; // Example value in Wh
+
+// Simulated Charging Station class
+class ChargingStation {
+  private ws: WebSocket | null = null;
+  private transactionId: string | null = null;
+  private idToken: IdToken | null = null;
+  private energyTransferred: number = 0;
+
+  constructor(private url: string) {}
+
+  connect() {
+    this.ws = new WebSocket(this.url);
+
+    this.ws.on('open', () => {
+      console.log('Connected to CSMS');
+      this.startTransaction();
+    });
+
+    this.ws.on('message', (data) => {
+      const response: TransactionEventResponse = JSON.parse(data.toString());
+      this.handleTransactionEventResponse(response);
+    });
+
+    this.ws.on('close', () => {
+      console.log('Connection closed');
+      // Simulate reconnection after a delay
+      setTimeout(() => this.connect(), 5000);
+    });
+  }
+
+  startTransaction() {
+    this.transactionId = uuidv4();
+    this.idToken = { idToken: 'valid_id_token', type: 'RFID' };
+
+    const request: TransactionEventRequest = {
+      eventType: 'Started',
+      triggerReason: 'Authorized',
+      transactionInfo: {
+        id: this.transactionId,
+        chargingState: 'Charging',
+      },
+      idToken: this.idToken,
+    };
+
+    this.sendTransactionEventRequest(request);
+  }
+
+  sendTransactionEventRequest(request: TransactionEventRequest) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(request));
+    }
+  }
+
+  handleTransactionEventResponse(response: TransactionEventResponse) {
+    if (response.idTokenInfo.status === 'Invalid') {
+      console.log('Received Invalid idToken status');
+      if (!STOP_TX_ON_INVALID_ID && this.energyTransferred < MAX_ENERGY_ON_INVALID_ID) {
+        console.log('Continuing transaction due to configuration');
+        // Simulate energy transfer
+        this.energyTransferred += 100; // Example value in Wh
+        if (this.energyTransferred >= MAX_ENERGY_ON_INVALID_ID) {
+          this.stopTransaction('MaxEnergyReached');
+        }
+      } else {
+        this.stopTransaction('Deauthorized');
+      }
+    }
+  }
+
+  stopTransaction(reason: string) {
+    if (this.transactionId) {
+      const request: TransactionEventRequest = {
+        eventType: 'Ended',
+        triggerReason: 'Deauthorized',
+        transactionInfo: {
+          id: this.transactionId,
+          chargingState: 'SuspendedEVSE',
+          stoppedReason: reason,
+        },
+      };
+
+      this.sendTransactionEventRequest(request);
+      this.transactionId = null;
+      this.idToken = null;
+      this.energyTransferred = 0;
+    }
+  }
+}
+
+// Main execution
+const chargingStation = new ChargingStation('ws://example.com/ocpp');
+chargingStation.connect();
