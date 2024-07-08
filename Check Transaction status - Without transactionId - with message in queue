@@ -1,0 +1,56 @@
+async function main() {
+  const chargingStation = new ChargingStation();
+  const csms = new CSMS();
+
+  // 1. The OCTT closes the WebSocket connection AND does not accept a reconnect.
+  await csms.closeWebSocketConnection();
+  csms.rejectReconnectionAttempts();
+
+  // 2. Manual Action: Start a transaction.
+  await chargingStation.startTransaction();
+
+  // 3. The OCTT accepts reconnection attempt from the Charging Station.
+  await csms.acceptReconnectionAttempt();
+
+  // 4. The Charging Station sends a TransactionEventRequest
+  const transactionEventRequest = await chargingStation.sendTransactionEventRequest();
+
+  // 5. The OCTT responds with a TransactionEventResponse
+  await csms.sendTransactionEventResponse(transactionEventRequest);
+
+  // 6. The OCTT sends a GetTransactionsRequest
+  const getTransactionsRequest = await csms.sendGetTransactionsRequest();
+
+  // 7. The Charging Station responds with a GetTransactionsResponse
+  const getTransactionsResponse = await chargingStation.sendGetTransactionsResponse(getTransactionsRequest);
+
+  // Tool validations
+  validateStep4(transactionEventRequest);
+  validateStep7(getTransactionsResponse);
+
+  // Post scenario validations
+  postScenarioValidations();
+}
+
+function validateStep4(transactionEventRequest: TransactionEventRequest) {
+  assert(transactionEventRequest.eventType === 'Started');
+  assert(transactionEventRequest.triggerReason === 'Authorized');
+  assert(transactionEventRequest.seqNo === 0);
+  assert(transactionEventRequest.offline === true);
+}
+
+function validateStep7(getTransactionsResponse: GetTransactionsResponse) {
+  assert(getTransactionsResponse.status === 'Accepted');
+  assert(Array.isArray(getTransactionsResponse.transactionInfo));
+  assert(getTransactionsResponse.transactionInfo.length > 0);
+  
+  const transaction = getTransactionsResponse.transactionInfo[0];
+  assert(transaction.transactionId !== undefined);
+  assert(transaction.chargingState === 'Charging');
+}
+
+function postScenarioValidations() {
+  // No specific post scenario validations mentioned in the test case
+}
+
+main().catch(error => console.error('Test failed:', error));
