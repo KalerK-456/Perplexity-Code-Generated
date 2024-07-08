@@ -1,0 +1,77 @@
+import { OCPPClient, TransactionEventRequest, TransactionEventResponse } from 'ocpp-ts';
+
+async function testReadSampledMeterValuesEventTypeUpdated() {
+  // Initialize OCPP client
+  const client = new OCPPClient('ws://localhost:8080');
+  await client.connect();
+
+  try {
+    // Simulate starting a transaction
+    await startTransaction(client);
+
+    // Simulate updating meter values
+    await updateMeterValues(client);
+
+    // Validate the response
+    // This would typically be done by an automated test framework
+    console.log('Test completed successfully');
+  } catch (error) {
+    console.error('Test failed:', error);
+  } finally {
+    await client.disconnect();
+  }
+}
+
+async function startTransaction(client: OCPPClient): Promise<void> {
+  const startRequest: TransactionEventRequest = {
+    eventType: 'Started',
+    timestamp: new Date().toISOString(),
+    triggerReason: 'Authorized',
+    seqNo: 0,
+    transactionInfo: {
+      transactionId: 'test_transaction_1'
+    },
+    // Add other required fields
+  };
+
+  const response: TransactionEventResponse = await client.send('TransactionEvent', startRequest);
+  // Validate response
+  if (response.idTokenInfo?.status !== 'Accepted') {
+    throw new Error('Transaction start was not accepted');
+  }
+}
+
+async function updateMeterValues(client: OCPPClient): Promise<void> {
+  const updateRequest: TransactionEventRequest = {
+    eventType: 'Updated',
+    timestamp: new Date().toISOString(),
+    triggerReason: 'MeterValuePeriodic',
+    seqNo: 1,
+    transactionInfo: {
+      transactionId: 'test_transaction_1'
+    },
+    meterValue: [
+      {
+        timestamp: new Date().toISOString(),
+        sampledValue: [
+          {
+            value: '10.5',
+            context: 'Sample.Periodic',
+            measurand: 'Energy.Active.Import.Register',
+            location: 'Outlet',
+            unit: 'kWh'
+          }
+        ]
+      }
+    ],
+    // Add other required fields
+  };
+
+  const response: TransactionEventResponse = await client.send('TransactionEvent', updateRequest);
+  // Validate response
+  if (response.idTokenInfo?.status !== 'Accepted') {
+    throw new Error('Meter value update was not accepted');
+  }
+}
+
+testReadSampledMeterValuesEventTypeUpdated();
