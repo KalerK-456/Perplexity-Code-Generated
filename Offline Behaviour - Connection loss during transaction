@@ -1,0 +1,75 @@
+import { ChargingStation, OCTT, IdToken, TransactionEventRequest, TransactionEventResponse } from './ocpp-types';
+
+async function testOfflineBehaviorDuringTransaction(chargingStation: ChargingStation, octt: OCTT) {
+  // Initial setup
+  const validIdToken: IdToken = {
+    idToken: "<Configured valid_idtoken_idtoken>",
+    type: "<Configured valid_idtoken_type>"
+  };
+
+  // 1. OCTT closes WebSocket connection and does not accept reconnect
+  await octt.closeWebSocketConnection();
+  octt.disableReconnection();
+
+  // Manual Action: Present valid idToken which is already configured in the Authorization Cache
+  console.log("Manual Action: Present valid idToken configured in Authorization Cache");
+  
+  // Wait for configured transaction duration
+  await new Promise(resolve => setTimeout(resolve, octt.getConfiguredTransactionDuration()));
+
+  // 2. OCTT accepts reconnection attempt from Charging Station
+  octt.enableReconnection();
+  await chargingStation.reconnect();
+
+  // 3. Charging Station sends TransactionEventRequest
+  const transactionEventRequest: TransactionEventRequest = await chargingStation.sendTransactionEventRequest();
+
+  // 4. OCTT responds with TransactionEventResponse
+  const transactionEventResponse: TransactionEventResponse = {
+    idTokenInfo: {
+      status: "Invalid"
+    }
+  };
+  await octt.sendTransactionEventResponse(transactionEventResponse);
+
+  // 5. Charging Station sends TransactionEventRequest with triggerReason Deauthorized
+  const deauthorizedEventRequest: TransactionEventRequest = await chargingStation.sendTransactionEventRequest();
+  if (deauthorizedEventRequest.triggerReason !== "Deauthorized") {
+    throw new Error("Expected triggerReason Deauthorized");
+  }
+
+  // 6. OCTT responds with TransactionEventResponse
+  await octt.sendTransactionEventResponse({});
+
+  // Perform validations
+  validateTransactionEventRequests(transactionEventRequest, deauthorizedEventRequest);
+}
+
+function validateTransactionEventRequests(firstRequest: TransactionEventRequest, secondRequest: TransactionEventRequest) {
+  // Validate first TransactionEventRequest
+  if (firstRequest.triggerReason === "Authorized") {
+    if (firstRequest.idToken?.idToken !== "<Configured valid_idtoken_idtoken>" ||
+        firstRequest.idToken?.type !== "<Configured valid_idtoken_type>" ||
+        firstRequest.offline !== true) {
+      throw new Error("Invalid first TransactionEventRequest");
+    }
+  }
+
+  // Check for ChargingStateChanged event
+  const chargingStateChangedEvent = [firstRequest, secondRequest].find(req => 
+    req.triggerReason === "ChargingStateChanged" && req.offline === true
+  );
+  if (!chargingStateChangedEvent) {
+    throw new Error("Missing ChargingStateChanged event");
+  }
+
+  // Validate Deauthorized event
+  if (secondRequest.triggerReason !== "Deauthorized") {
+    throw new Error("Missing Deauthorized event");
+  }
+}
+
+// Run the test
+const chargingStation = new ChargingStation();
+const octt = new OCTT();
+testOfflineBehaviorDuringTransaction(chargingStation, octt).catch(console.error);
