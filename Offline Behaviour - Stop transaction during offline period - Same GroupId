@@ -1,0 +1,53 @@
+// Main test scenario
+async function testOfflineStopTransactionSameGroupId() {
+  const chargingStation = new ChargingStation();
+  const csms = new CSMS();
+
+  // Step 1: Close WebSocket connection and don't accept reconnects
+  await csms.closeWebSocketConnection();
+  csms.rejectReconnectionAttempts();
+
+  // Step 2: Manually present valid idToken to start transaction
+  await chargingStation.presentIdToken(VALID_ID_TOKEN);
+
+  // Step 3: Wait for configured transaction duration
+  await sleep(CONFIGURED_TRANSACTION_DURATION);
+
+  // Step 4: Manually present valid idToken2 with same GroupId to stop transaction
+  await chargingStation.presentIdToken(VALID_ID_TOKEN_2_SAME_GROUP);
+
+  // Step 5: Accept reconnection attempt from Charging Station
+  await csms.acceptReconnectionAttempt();
+
+  // Step 6: Charging Station sends queued TransactionEventRequests
+  const transactionEvents = await chargingStation.sendQueuedTransactionEvents();
+
+  // Validate transaction events
+  validateTransactionEvents(transactionEvents);
+
+  // Step 7: CSMS responds with TransactionEventResponses
+  await csms.sendTransactionEventResponses(transactionEvents);
+
+  // Step 8: Charging Station sends StatusNotificationRequest
+  const statusNotification = await chargingStation.sendStatusNotification();
+
+  // Validate status notification
+  validateStatusNotification(statusNotification);
+
+  // Step 9: CSMS responds with StatusNotificationResponse
+  await csms.sendStatusNotificationResponse();
+}
+
+// Helper functions
+function validateTransactionEvents(events: TransactionEvent[]) {
+  // Validate event details as per spec
+  // e.g. check for Authorized, ChargingStateChanged, Deauthorized events
+}
+
+function validateStatusNotification(notification: StatusNotification) {
+  // Validate notification details
+  // e.g. check connectorStatus is Available
+}
+
+// Run the test
+testOfflineStopTransactionSameGroupId();
