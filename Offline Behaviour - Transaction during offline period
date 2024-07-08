@@ -1,0 +1,88 @@
+import { TransactionEventRequest, TransactionEventResponse } from './ocpp-types';
+
+class ChargingStation {
+  private transactionQueue: TransactionEventRequest[] = [];
+
+  async executeReusableStateTransactionEventsInQueueEnded(): Promise<void> {
+    while (this.transactionQueue.length > 0) {
+      const request = this.transactionQueue.shift();
+      if (request) {
+        await this.sendTransactionEventRequest(request);
+      }
+    }
+  }
+
+  private async sendTransactionEventRequest(request: TransactionEventRequest): Promise<void> {
+    try {
+      const response = await this.sendToCSMS(request);
+      this.handleTransactionEventResponse(response);
+    } catch (error) {
+      console.error('Error sending TransactionEventRequest:', error);
+    }
+  }
+
+  private async sendToCSMS(request: TransactionEventRequest): Promise<TransactionEventResponse> {
+    // Simulating CSMS communication
+    console.log('Sending TransactionEventRequest to CSMS:', request);
+    // In a real implementation, this would be an API call to the CSMS
+    return {
+      // Simulated response
+      totalCost: 10.5,
+      chargingPriority: 1,
+      idTokenInfo: {
+        status: 'Accepted'
+      },
+      updatedPersonalMessage: {
+        format: 'UTF8',
+        content: 'Thank you for charging!'
+      }
+    };
+  }
+
+  private handleTransactionEventResponse(response: TransactionEventResponse): void {
+    console.log('Received TransactionEventResponse from CSMS:', response);
+    // Handle the response as needed
+  }
+
+  // Method to add transaction events to the queue
+  addTransactionEvent(event: TransactionEventRequest): void {
+    this.transactionQueue.push(event);
+  }
+}
+
+// Usage example
+async function main() {
+  const chargingStation = new ChargingStation();
+
+  // Simulate adding transaction events to the queue
+  chargingStation.addTransactionEvent({
+    eventType: 'Started',
+    timestamp: new Date().toISOString(),
+    triggerReason: 'Authorized',
+    seqNo: 1,
+    transactionInfo: {
+      transactionId: 'TX001',
+      chargingState: 'Charging'
+    },
+    idToken: {
+      idToken: '1234',
+      type: 'ISO14443'
+    }
+  });
+
+  chargingStation.addTransactionEvent({
+    eventType: 'Updated',
+    timestamp: new Date().toISOString(),
+    triggerReason: 'ChargingStateChanged',
+    seqNo: 2,
+    transactionInfo: {
+      transactionId: 'TX001',
+      chargingState: 'Charging'
+    }
+  });
+
+  // Execute the reusable state
+  await chargingStation.executeReusableStateTransactionEventsInQueueEnded();
+}
+
+main().catch(console.error);
