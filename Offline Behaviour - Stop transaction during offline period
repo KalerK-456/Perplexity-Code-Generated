@@ -1,0 +1,50 @@
+import { OCPPChargePoint, TransactionEventRequest, TransactionEventResponse } from 'ocpp-ts';
+
+async function testOfflineStopTransaction(chargePoint: OCPPChargePoint) {
+  // 1. Close WebSocket connection and don't accept reconnect
+  await chargePoint.disconnect();
+  chargePoint.setReconnectEnabled(false);
+
+  // Manual Action: Stop the transaction
+  console.log("Manual Action: Stop the ongoing transaction");
+
+  // 2. Accept reconnection attempt
+  chargePoint.setReconnectEnabled(true);
+  await chargePoint.connect();
+
+  // 3. Charging Station sends TransactionEventRequest(s)
+  chargePoint.on('TransactionEventRequest', async (request: TransactionEventRequest) => {
+    console.log('Received TransactionEventRequest:', request);
+
+    // 4. Respond with TransactionEventResponse
+    const response: TransactionEventResponse = {
+      // Add appropriate response fields
+    };
+    await chargePoint.send('TransactionEventResponse', response);
+
+    // Validate the request
+    if (request.eventType === 'Ended' && request.triggerReason === 'StopAuthorized') {
+      console.log('Transaction stopped successfully during offline period');
+    } else {
+      console.error('Unexpected TransactionEventRequest received');
+    }
+  });
+
+  // 5. Execute Reusable State EVConnectedPostSession
+  await executeReusableState('EVConnectedPostSession');
+
+  // 6. Execute Reusable State EVDisconnected
+  await executeReusableState('EVDisconnected');
+
+  // 7. Execute Reusable State ParkingBayUnoccupied
+  await executeReusableState('ParkingBayUnoccupied');
+}
+
+async function executeReusableState(stateName: string) {
+  console.log(`Executing Reusable State: ${stateName}`);
+  // Implement the logic for each reusable state
+}
+
+// Usage
+const chargePoint = new OCPPChargePoint(/* configuration */);
+testOfflineStopTransaction(chargePoint);
