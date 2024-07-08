@@ -1,0 +1,54 @@
+// Import necessary modules and types
+import { ChargingStation, CSMS, TransactionEventRequest, TransactionEventResponse } from 'ocpp-library';
+
+// Define the Charging Station and CSMS instances
+const chargingStation = new ChargingStation();
+const csms = new CSMS();
+
+// Define the reusable states
+const EVConnectedPostSession = () => {
+  // Logic for EVConnectedPostSession state
+  console.log('Executing EVConnectedPostSession state...');
+};
+
+const ParkingBayUnoccupied = () => {
+  // Logic for ParkingBayUnoccupied state
+  console.log('Executing ParkingBayUnoccupied state...');
+};
+
+// Main Test Scenario
+async function mainTestScenario() {
+  // Step 1: Ensure the Charging Station is in the EnergyTransferStarted state
+  chargingStation.setState('EnergyTransferStarted');
+  console.log('Charging Station is in EnergyTransferStarted state.');
+
+  // Step 2: Manually disconnect the EV from the EVSE
+  chargingStation.disconnectEV();
+  console.log('EV has been manually disconnected from the EVSE.');
+
+  // Step 3: Charging Station sends a TransactionEventRequest to the CSMS
+  const transactionEventRequest: TransactionEventRequest = {
+    eventType: 'Ended',
+    triggerReason: 'EVDisconnected',
+    transactionInfo: {
+      id: 'transactionId',
+      stoppedReason: 'EVDisconnected'
+    }
+  };
+  console.log('Sending TransactionEventRequest to CSMS...');
+  const transactionEventResponse: TransactionEventResponse = await csms.handleTransactionEventRequest(transactionEventRequest);
+
+  // Step 4: CSMS responds with a TransactionEventResponse
+  console.log('Received TransactionEventResponse from CSMS:', transactionEventResponse);
+
+  // Step 5: Execute the EVConnectedPostSession reusable state
+  EVConnectedPostSession();
+
+  // Step 6: Execute the ParkingBayUnoccupied reusable state
+  ParkingBayUnoccupied();
+}
+
+// Execute the main test scenario
+mainTestScenario().catch(error => {
+  console.error('Error executing the main test scenario:', error);
+});
