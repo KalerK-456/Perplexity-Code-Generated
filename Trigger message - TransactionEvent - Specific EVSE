@@ -1,0 +1,47 @@
+import { OCPPChargePoint, TransactionEventRequest, TransactionEventResponse } from 'ocpp-ts';
+
+async function main() {
+  // Initialize charge point
+  const chargePoint = new OCPPChargePoint('CP001');
+
+  // Step 1: OCTT sends TriggerMessageRequest
+  const triggerMessageRequest = {
+    requestedMessage: 'TransactionEvent',
+    evse: {
+      id: 1 // Specific EVSE ID
+    }
+  };
+  
+  await chargePoint.handleTriggerMessageRequest(triggerMessageRequest);
+
+  // Step 2: Charging Station responds with TriggerMessageResponse
+  const triggerMessageResponse = await chargePoint.sendTriggerMessageResponse({
+    status: 'Accepted'
+  });
+
+  console.log('TriggerMessageResponse sent:', triggerMessageResponse);
+
+  // Step 3: Charging Station sends TransactionEventRequest
+  const transactionEventRequest: TransactionEventRequest = {
+    eventType: 'Updated',
+    timestamp: new Date().toISOString(),
+    triggerReason: 'Trigger',
+    seqNo: 0,
+    transactionInfo: {
+      transactionId: 'TRX001'
+    },
+    evse: {
+      id: 1,
+      connectorId: 1
+    }
+  };
+
+  const transactionEventResponse = await chargePoint.sendTransactionEventRequest(transactionEventRequest);
+
+  // Step 4: OCTT responds with TransactionEventResponse
+  console.log('TransactionEventResponse received:', transactionEventResponse);
+
+  // Additional validation logic can be added here
+}
+
+main().catch(error => console.error('Test failed:', error));
