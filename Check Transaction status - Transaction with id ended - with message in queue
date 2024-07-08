@@ -1,0 +1,105 @@
+import { OCPP201Client } from 'ocpp-2.0.1-client';
+import { GetTransactionStatusRequest, GetTransactionStatusResponse, TransactionEventRequest, TransactionEventResponse } from 'ocpp-2.0.1-types';
+
+async function main() {
+  const chargingStation = new OCPP201Client('ws://localhost:8080');
+  const octt = new MockOCTT();
+
+  // Step 1: The Charging Station sends a GetTransactionStatusRequest
+  const getTransactionStatusRequest: GetTransactionStatusRequest = {
+    transactionId: 'TEST_TRANSACTION_ID'
+  };
+
+  await chargingStation.send('GetTransactionStatus', getTransactionStatusRequest);
+
+  // Step 2: The OCTT responds with a GetTransactionStatusResponse
+  const getTransactionStatusResponse: GetTransactionStatusResponse = {
+    transactionId: 'TEST_TRANSACTION_ID',
+    chargingState: 'SuspendedEVSE',
+    timeSpentCharging: 3600,
+    totalEnergy: 15.0
+  };
+
+  await octt.respond('GetTransactionStatus', getTransactionStatusResponse);
+
+  // Step 3: The Charging Station sends a TransactionEventRequest
+  const transactionEventRequest: TransactionEventRequest = {
+    eventType: 'Ended',
+    meterValue: [],
+    timestamp: new Date().toISOString(),
+    triggerReason: 'Deauthorized',
+    seqNo: 0,
+    transactionInfo: {
+      transactionId: 'TEST_TRANSACTION_ID'
+    }
+  };
+
+  await chargingStation.send('TransactionEvent', transactionEventRequest);
+
+  // Step 4: The OCTT responds with a TransactionEventResponse
+  const transactionEventResponse: TransactionEventResponse = {
+    totalCost: 0,
+    chargingPriority: 0,
+    idTokenInfo: {
+      status: 'Invalid'
+    },
+    updatedPersonalMessage: {
+      format: 'UTF8',
+      content: 'Transaction ended'
+    }
+  };
+
+  await octt.respond('TransactionEvent', transactionEventResponse);
+
+  // Step 5: The Charging Station sends another TransactionEventRequest
+  const secondTransactionEventRequest: TransactionEventRequest = {
+    eventType: 'Ended',
+    meterValue: [],
+    timestamp: new Date().toISOString(),
+    triggerReason: 'EVDisconnected',
+    seqNo: 1,
+    transactionInfo: {
+      transactionId: 'TEST_TRANSACTION_ID'
+    }
+  };
+
+  await chargingStation.send('TransactionEvent', secondTransactionEventRequest);
+
+  // Step 6: The OCTT responds with a TransactionEventResponse
+  const secondTransactionEventResponse: TransactionEventResponse = {
+    totalCost: 0,
+    chargingPriority: 0,
+    idTokenInfo: {
+      status: 'Invalid'
+    }
+  };
+
+  await octt.respond('TransactionEvent', secondTransactionEventResponse);
+
+  // Tool validations
+  validateTransactionEventRequests(transactionEventRequest, secondTransactionEventRequest);
+
+  // Post scenario validations
+  console.log('Verify that the Charging Station has ended the transaction.');
+}
+
+function validateTransactionEventRequests(first: TransactionEventRequest, second: TransactionEventRequest) {
+  console.assert(first.eventType === 'Ended', 'First request eventType should be Ended');
+  console.assert(first.triggerReason === 'Deauthorized', 'First request triggerReason should be Deauthorized');
+  console.assert(first.seqNo === 0, 'First request seqNo should be 0');
+  
+  console.assert(second.eventType === 'Ended', 'Second request eventType should be Ended');
+  console.assert(second.triggerReason === 'EVDisconnected', 'Second request triggerReason should be EVDisconnected');
+  console.assert(second.seqNo === 1, 'Second request seqNo should be 1');
+  
+  console.assert(first.transactionInfo.transactionId === second.transactionInfo.transactionId, 
+    'Both requests should have the same transactionId');
+}
+
+main().catch(console.error);
+
+class MockOCTT {
+  async respond(action: string, payload: any) {
+    console.log(`OCTT responded to ${action} with:`, payload);
+  }
+}
