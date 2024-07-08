@@ -1,0 +1,93 @@
+import WebSocket from 'ws';
+
+const CSMS_URL = 'ws://localhost:8080'; // Replace with actual CSMS URL
+const CHARGING_STATION_ID = 'CS001';
+const EVSE_ID = 1;
+const CONNECTOR_ID = 1;
+const TIMEOUT_DURATION = 30000; // 30 seconds
+
+interface RequestStartTransactionRequest {
+  evseId: number;
+  remoteStartId: number;
+  idToken: {
+    idToken: string;
+    type: string;
+  };
+}
+
+interface TransactionEventRequest {
+  eventType: string;
+  triggerReason: string;
+  evse: {
+    id: number;
+    connectorId: number;
+  };
+  transactionInfo: {
+    remoteStartId: number;
+  };
+}
+
+const ws = new WebSocket(CSMS_URL);
+
+ws.on('open', () => {
+  console.log('Connected to CSMS');
+
+  // Step 1: Send RequestStartTransactionRequest
+  const requestStartTransaction: RequestStartTransactionRequest = {
+    evseId: EVSE_ID,
+    remoteStartId: 1,
+    idToken: {
+      idToken: 'valid_id_token', // Replace with actual token
+      type: 'ISO14443'
+    }
+  };
+
+  ws.send(JSON.stringify({
+    messageType: 2,
+    messageId: 1,
+    action: 'RequestStartTransaction',
+    payload: requestStartTransaction
+  }));
+
+  console.log('RequestStartTransactionRequest sent');
+});
+
+ws.on('message', (data) => {
+  const message = JSON.parse(data.toString());
+
+  if (message.action === 'RequestStartTransactionResponse' && message.payload.status === 'Accepted') {
+    console.log('Transaction started remotely');
+
+    // Step 2: Simulate cable plugin timeout
+    setTimeout(() => {
+      const transactionEvent: TransactionEventRequest = {
+        eventType: 'Started',
+        triggerReason: 'RemoteStart',
+        evse: {
+          id: EVSE_ID,
+          connectorId: CONNECTOR_ID
+        },
+        transactionInfo: {
+          remoteStartId: 1
+        }
+      };
+
+      ws.send(JSON.stringify({
+        messageType: 2,
+        messageId: 2,
+        action: 'TransactionEvent',
+        payload: transactionEvent
+      }));
+
+      console.log('TransactionEventRequest sent due to cable plugin timeout');
+    }, TIMEOUT_DURATION);
+  }
+});
+
+ws.on('close', () => {
+  console.log('Disconnected from CSMS');
+});
+
+ws.on('error', (error) => {
+  console.error('WebSocket error:', error);
+});
