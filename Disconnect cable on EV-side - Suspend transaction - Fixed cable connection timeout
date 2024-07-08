@@ -1,0 +1,92 @@
+import { WebSocket } from 'ws';
+import { OCPPCommands, OCPPResponses } from 'ocpp-types'; // Assuming these types are defined in a library
+
+// Configuration and constants
+const CHARGING_STATION_URL = 'ws://charging-station-url';
+const RECONNECT_TIMEOUT = 30000; // 30 seconds
+const EVSE_ID = 1;
+const CONNECTOR_ID = 1;
+
+// Helper function to send a message and wait for a response
+async function sendMessage(ws: WebSocket, message: any): Promise<any> {
+  return new Promise((resolve, reject) => {
+    ws.send(JSON.stringify(message));
+    ws.on('message', (data) => {
+      const response = JSON.parse(data.toString());
+      resolve(response);
+    });
+    ws.on('error', (error) => {
+      reject(error);
+    });
+  });
+}
+
+// Main test scenario
+async function mainTestScenario() {
+  const ws = new WebSocket(CHARGING_STATION_URL);
+
+  ws.on('open', async () => {
+    try {
+      // Step 1: Disconnect cable on EV-side
+      console.log('Step 1: Disconnect cable on EV-side');
+      // Simulate cable disconnection
+      await sendMessage(ws, {
+        command: OCPPCommands.StatusNotification,
+        params: {
+          connectorId: CONNECTOR_ID,
+          evseId: EVSE_ID,
+          status: 'SuspendedEV',
+          timestamp: new Date().toISOString(),
+        },
+      });
+
+      // Step 2: Suspend transaction
+      console.log('Step 2: Suspend transaction');
+      await sendMessage(ws, {
+        command: OCPPCommands.TransactionEvent,
+        params: {
+          eventType: 'Updated',
+          triggerReason: 'CablePluggedOut',
+          timestamp: new Date().toISOString(),
+          transactionId: '12345', // Example transaction ID
+          evse: { id: EVSE_ID },
+          connectorId: CONNECTOR_ID,
+          transactionData: {
+            chargingState: 'SuspendedEV',
+          },
+        },
+      });
+
+      // Step 3: Fixed cable connection timeout
+      console.log('Step 3: Fixed cable connection timeout');
+      setTimeout(async () => {
+        await sendMessage(ws, {
+          command: OCPPCommands.StatusNotification,
+          params: {
+            connectorId: CONNECTOR_ID,
+            evseId: EVSE_ID,
+            status: 'Available',
+            timestamp: new Date().toISOString(),
+          },
+        });
+
+        console.log('Test scenario completed successfully');
+        ws.close();
+      }, RECONNECT_TIMEOUT);
+    } catch (error) {
+      console.error('Error during test scenario:', error);
+      ws.close();
+    }
+  });
+
+  ws.on('error', (error) => {
+    console.error('WebSocket error:', error);
+  });
+
+  ws.on('close', () => {
+    console.log('WebSocket connection closed');
+  });
+}
+
+// Execute the test scenario
+mainTestScenario();
