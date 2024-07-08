@@ -1,0 +1,42 @@
+import { ChargingStation, CSMS, EVSimulator, TransactionEventRequest, TransactionEventResponse } from './ocpp-types'; // Assume these types are defined
+
+async function runTestScenario() {
+  const chargingStation = new ChargingStation();
+  const csms = new CSMS();
+  const evSimulator = new EVSimulator();
+
+  // 1. Execute Reusable State EVConnectedPreSession
+  await chargingStation.executeReusableState('EVConnectedPreSession');
+
+  // 2. Start Charging Session
+  const startTransactionEvent = await chargingStation.startChargingSession();
+  const startResponse = await csms.handleTransactionEvent(startTransactionEvent);
+  console.assert(startResponse.status === 'Accepted', 'Start transaction should be accepted');
+
+  // 3. Simulate EV Disconnection
+  await evSimulator.disconnect();
+
+  // 4. Handle Disconnection
+  const disconnectionEvent = await chargingStation.waitForDisconnectionEvent();
+  console.assert(disconnectionEvent.triggerReason === 'EVDisconnected', 'Trigger reason should be EVDisconnected');
+  
+  const disconnectionResponse = await csms.handleTransactionEvent(disconnectionEvent);
+  console.assert(disconnectionResponse.status === 'Accepted', 'Disconnection event should be accepted');
+
+  // Verify energy transfer stopped
+  const chargingStatus = await chargingStation.getChargingStatus();
+  console.assert(chargingStatus === 'Stopped', 'Energy transfer should be stopped');
+
+  // 5. Post-Disconnection State
+  await chargingStation.executeReusableState('EVDisconnected');
+  await chargingStation.executeReusableState('ParkingBayUnoccupied');
+
+  // Additional validations
+  const finalTransactionStatus = await chargingStation.getTransactionStatus();
+  console.assert(finalTransactionStatus === 'Ended', 'Transaction should be ended');
+
+  const cableStatus = await chargingStation.getCableStatus();
+  console.assert(cableStatus === 'Unlocked', 'Charging cable should be unlocked');
+}
+
+runTestScenario().catch(console.error);
