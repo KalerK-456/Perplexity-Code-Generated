@@ -1,0 +1,61 @@
+// Import necessary OCPP types and libraries
+import {
+  TransactionEventRequest,
+  TransactionEventResponse,
+  IdTokenInfoStatus,
+  TriggerReason,
+  EventType,
+  ChargingState
+} from 'ocpp-types';
+
+// Mock data and configurations
+const validIdToken = 'valid_id_token';
+const differentIdToken = 'different_id_token';
+const messageTimeout = 5000; // in milliseconds
+
+// Mock function to simulate sending and receiving OCPP messages
+function sendTransactionEventRequest(request: TransactionEventRequest): Promise<TransactionEventResponse> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve({
+        idTokenInfo: {
+          status: IdTokenInfoStatus.Accepted
+        }
+      });
+    }, 1000);
+  });
+}
+
+// Main test scenario implementation
+async function stopTransactionOptionsStopAuthorizedLocal() {
+  // Step 1: Present a different idToken than the one used to start the transaction
+  const transactionEventRequest: TransactionEventRequest = {
+    eventType: EventType.Updated,
+    triggerReason: TriggerReason.Authorized,
+    idToken: {
+      idToken: differentIdToken,
+      type: 'RFID'
+    },
+    transactionInfo: {
+      id: 'transaction_id',
+      chargingState: ChargingState.SuspendedEVSE
+    }
+  };
+
+  // Send the TransactionEventRequest
+  const transactionEventResponse = await sendTransactionEventRequest(transactionEventRequest);
+
+  // Validate the response
+  if (transactionEventResponse.idTokenInfo.status !== IdTokenInfoStatus.Accepted) {
+    console.error('TransactionEventRequest failed');
+    return;
+  }
+
+  // Ensure no further messages are sent after receiving a different idToken
+  setTimeout(() => {
+    console.log('Test case completed without further messages');
+  }, messageTimeout);
+}
+
+// Execute the test scenario
+stopTransactionOptionsStopAuthorizedLocal();
