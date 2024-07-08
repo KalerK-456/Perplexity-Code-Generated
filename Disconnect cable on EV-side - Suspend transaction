@@ -1,0 +1,74 @@
+import WebSocket from 'ws';
+
+// Define OCPP message types and interfaces
+interface TransactionEventRequest {
+  eventType: string;
+  triggerReason: string;
+  transactionInfo: {
+    id: string;
+    chargingState: string;
+  };
+}
+
+interface StatusNotificationRequest {
+  connectorId: number;
+  status: string;
+  errorCode: string;
+}
+
+// Function to handle cable disconnection
+function handleCableDisconnection(transactionId: string, connectorId: number, ws: WebSocket) {
+  // Step 1: Send TransactionEventRequest with triggerReason SuspendedEVSE
+  const transactionEventRequest: TransactionEventRequest = {
+    eventType: 'Updated',
+    triggerReason: 'SuspendedEVSE',
+    transactionInfo: {
+      id: transactionId,
+      chargingState: 'SuspendedEVSE'
+    }
+  };
+
+  ws.send(JSON.stringify({
+    action: 'TransactionEvent',
+    payload: transactionEventRequest
+  }));
+
+  // Step 2: Update connector status to SuspendedEVSE
+  const statusNotificationRequest: StatusNotificationRequest = {
+    connectorId: connectorId,
+    status: 'SuspendedEVSE',
+    errorCode: 'NoError'
+  };
+
+  ws.send(JSON.stringify({
+    action: 'StatusNotification',
+    payload: statusNotificationRequest
+  }));
+}
+
+// WebSocket connection setup
+const ws = new WebSocket('wss://example.com/ocpp');
+
+// Handle WebSocket connection open event
+ws.on('open', () => {
+  console.log('Connected to CSMS');
+  
+  // Example usage: handle cable disconnection for transaction ID '12345' on connector ID 1
+  handleCableDisconnection('12345', 1, ws);
+});
+
+// Handle WebSocket messages
+ws.on('message', (data) => {
+  const message = JSON.parse(data.toString());
+  console.log('Received message:', message);
+});
+
+// Handle WebSocket errors
+ws.on('error', (error) => {
+  console.error('WebSocket error:', error);
+});
+
+// Handle WebSocket close event
+ws.on('close', () => {
+  console.log('Disconnected from CSMS');
+});
