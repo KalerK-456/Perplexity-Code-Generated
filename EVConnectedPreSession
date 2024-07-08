@@ -1,0 +1,73 @@
+// Define the necessary interfaces and classes
+
+interface IdTokenInfo {
+  status: string;
+}
+
+interface MessageContent {
+  format: string;
+  content: string;
+}
+
+interface TransactionEventResponse {
+  totalCost?: number;
+  chargingPriority?: number;
+  idTokenInfo?: IdTokenInfo;
+  updatedPersonalMessage?: MessageContent;
+}
+
+interface TransactionEventRequest {
+  eventType: string;
+  timestamp: string;
+  triggerReason: string;
+  seqNo: number;
+  transactionInfo: {
+    transactionId: string;
+  };
+}
+
+// Function to handle the status change notification
+function notifyCSMS(status: string) {
+  console.log(`Charging Station notifies CSMS: Connector status changed to ${status}`);
+}
+
+// Function to send a TransactionEventRequest
+function sendTransactionEventRequest(request: TransactionEventRequest) {
+  console.log('Sending TransactionEventRequest:', JSON.stringify(request, null, 2));
+  // Simulate the response from CSMS
+  const response: TransactionEventResponse = {
+    totalCost: 10.5,
+    chargingPriority: 1,
+    idTokenInfo: { status: 'Accepted' },
+    updatedPersonalMessage: { format: 'TEXT', content: 'Thank you for charging!' }
+  };
+  return response;
+}
+
+// Main function to execute the process
+function executeProcess(txStartPoint: string, transactionStarted: boolean) {
+  // Step 1: Notify CSMS about the status change of the connector
+  notifyCSMS('Connected');
+
+  // Step 2: OCTT responds accordingly (simulated here)
+  console.log('OCTT responds accordingly');
+
+  // Step 3: Send a TransactionEventRequest if conditions are met
+  if (txStartPoint === 'EVConnected' || transactionStarted) {
+    const transactionEventRequest: TransactionEventRequest = {
+      eventType: 'Started',
+      timestamp: new Date().toISOString(),
+      triggerReason: 'EVConnected',
+      seqNo: 1,
+      transactionInfo: { transactionId: 'TX12345' }
+    };
+
+    const response = sendTransactionEventRequest(transactionEventRequest);
+    console.log('TransactionEventResponse:', JSON.stringify(response, null, 2));
+  } else {
+    console.log('Conditions not met for sending TransactionEventRequest');
+  }
+}
+
+// Example usage
+executeProcess('EVConnected', false);
