@@ -1,0 +1,71 @@
+import { OCPPChargePoint, OCPPCentralSystem, TransactionEventRequest, TransactionEventResponse } from 'ocpp-ts';
+
+async function testParkingBayOccupied() {
+  const chargePoint = new OCPPChargePoint('CP001');
+  const centralSystem = new OCPPCentralSystem();
+
+  // Connect charge point to central system
+  await chargePoint.connect(centralSystem);
+
+  // Main test scenario
+  try {
+    // 1. Simulate vehicle entering parking bay
+    await chargePoint.simulateVehicleEntered();
+
+    // 2. Charge point should send StatusNotificationRequest
+    const statusNotification = await centralSystem.waitForStatusNotificationRequest();
+    console.assert(statusNotification.status === 'Occupied', 'Status should be Occupied');
+
+    // 3. Central system responds with StatusNotificationResponse
+    await centralSystem.sendStatusNotificationResponse({});
+
+    // 4. Charge point should send TransactionEventRequest if configured
+    if (chargePoint.getConfig('TxStartPoint').includes('ParkingBayOccupancy')) {
+      const transactionEventRequest: TransactionEventRequest = {
+        eventType: 'Started',
+        timestamp: new Date().toISOString(),
+        triggerReason: 'ParkingBayOccupancy',
+        seqNo: 0,
+        transactionInfo: {
+          transactionId: 'tx123',
+          chargingState: 'Idle',
+          timeSpentCharging: 0,
+          stoppedReason: null,
+          remoteStartId: null
+        },
+        evse: {
+          id: 1,
+          connectorId: 1
+        },
+        idToken: {
+          idToken: 'sample_id_token',
+          type: 'Central'
+        }
+      };
+
+      // Send TransactionEventRequest
+      await chargePoint.sendTransactionEventRequest(transactionEventRequest);
+
+      // 5. Central system responds with TransactionEventResponse
+      const transactionEventResponse: TransactionEventResponse = {
+        idTokenInfo: {
+          status: 'Accepted'
+        }
+      };
+      await centralSystem.sendTransactionEventResponse(transactionEventResponse);
+
+      // Validate the response
+      const receivedTransactionEventResponse = await chargePoint.waitForTransactionEventResponse();
+      console.assert(receivedTransactionEventResponse.idTokenInfo.status === 'Accepted', 'TransactionEventResponse status should be Accepted');
+    }
+
+    console.log('ParkingBayOccupied test passed');
+  } catch (error) {
+    console.error('ParkingBayOccupied test failed:', error);
+  }
+
+  // Disconnect
+  await chargePoint.disconnect();
+}
+
+testParkingBayOccupied();
