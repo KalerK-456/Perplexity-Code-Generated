@@ -1,0 +1,141 @@
+// Define the necessary types for OCPP messages
+type IdToken = {
+  idToken: string;
+  type: string;
+};
+
+type TransactionEventRequest = {
+  eventType: string;
+  triggerReason: string;
+  seqNo: number;
+  transactionInfo: {
+    transactionId: string;
+    chargingState: string;
+    timeSpentCharging: number;
+  };
+  evse: {
+    id: number;
+    connectorId: number;
+  };
+  idToken?: IdToken;
+};
+
+type TransactionEventResponse = {
+  status: string;
+  currentTime: string;
+};
+
+type StatusNotificationRequest = {
+  connectorId: number;
+  status: string;
+  errorCode: string;
+};
+
+type StatusNotificationResponse = {
+  status: string;
+};
+
+// Simulated Charging Station class
+class ChargingStation {
+  private transactionId: string;
+  private seqNo: number;
+
+  constructor(transactionId: string) {
+    this.transactionId = transactionId;
+    this.seqNo = 0;
+  }
+
+  // Method to send a TransactionEventRequest
+  sendTransactionEventRequest(eventType: string, triggerReason: string, chargingState: string, timeSpentCharging: number, evseId: number, connectorId: number, idToken?: IdToken): TransactionEventRequest {
+    const request: TransactionEventRequest = {
+      eventType,
+      triggerReason,
+      seqNo: this.seqNo++,
+      transactionInfo: {
+        transactionId: this.transactionId,
+        chargingState,
+        timeSpentCharging,
+      },
+      evse: {
+        id: evseId,
+        connectorId,
+      },
+      idToken,
+    };
+    console.log("Sending TransactionEventRequest:", request);
+    return request;
+  }
+
+  // Method to notify the CSMS about the current state of the connector
+  sendStatusNotificationRequest(connectorId: number, status: string, errorCode: string): StatusNotificationRequest {
+    const request: StatusNotificationRequest = {
+      connectorId,
+      status,
+      errorCode,
+    };
+    console.log("Sending StatusNotificationRequest:", request);
+    return request;
+  }
+
+  // Method to handle the response from the CSMS
+  handleTransactionEventResponse(response: TransactionEventResponse) {
+    console.log("Received TransactionEventResponse:", response);
+  }
+
+  // Method to handle the response from the CSMS
+  handleStatusNotificationResponse(response: StatusNotificationResponse) {
+    console.log("Received StatusNotificationResponse:", response);
+  }
+}
+
+// Simulated CSMS class
+class CSMS {
+  // Method to respond to a TransactionEventRequest
+  respondToTransactionEventRequest(request: TransactionEventRequest): TransactionEventResponse {
+    const response: TransactionEventResponse = {
+      status: "Accepted",
+      currentTime: new Date().toISOString(),
+    };
+    console.log("Responding to TransactionEventRequest:", response);
+    return response;
+  }
+
+  // Method to respond to a StatusNotificationRequest
+  respondToStatusNotificationRequest(request: StatusNotificationRequest): StatusNotificationResponse {
+    const response: StatusNotificationResponse = {
+      status: "Accepted",
+    };
+    console.log("Responding to StatusNotificationRequest:", response);
+    return response;
+  }
+}
+
+// Main test scenario implementation
+function mainTestScenario() {
+  const transactionId = "12345";
+  const chargingStation = new ChargingStation(transactionId);
+  const csms = new CSMS();
+
+  // Step 1: Charging Station sends a TransactionEventRequest
+  const transactionEventRequest = chargingStation.sendTransactionEventRequest("Started", "Authorized", "Charging", 0, 1, 1, { idToken: "abc123", type: "RFID" });
+
+  // Step 2: CSMS responds with a TransactionEventResponse
+  const transactionEventResponse = csms.respondToTransactionEventRequest(transactionEventRequest);
+  chargingStation.handleTransactionEventResponse(transactionEventResponse);
+
+  // Manual Action: Present the IdToken that was used to start the transaction
+  // (This would be a manual step in a real scenario)
+
+  // Manual Action: Disconnect the EV and EVSE on Charging Station side
+  // (This would be a manual step in a real scenario)
+
+  // Step 3: Charging Station notifies the CSMS about the current state of the connector
+  const statusNotificationRequest = chargingStation.sendStatusNotificationRequest(1, "Available", "NoError");
+
+  // Step 4: CSMS responds accordingly
+  const statusNotificationResponse = csms.respondToStatusNotificationRequest(statusNotificationRequest);
+  chargingStation.handleStatusNotificationResponse(statusNotificationResponse);
+}
+
+// Execute the main test scenario
+mainTestScenario();
