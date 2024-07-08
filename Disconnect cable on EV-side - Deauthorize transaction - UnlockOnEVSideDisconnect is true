@@ -1,0 +1,86 @@
+import { TransactionEventRequest, StatusNotificationRequest, NotifyEventRequest } from 'ocpp-types';
+
+class ChargingStation {
+  private csms: CSMS;
+
+  constructor(csms: CSMS) {
+    this.csms = csms;
+  }
+
+  public disconnectEVSide(): void {
+    const transactionEventRequest: TransactionEventRequest = {
+      eventType: 'Ended',
+      triggerReason: 'EVCommunicationLost',
+      seqNo: 1,
+      timestamp: new Date().toISOString(),
+      transactionInfo: {
+        transactionId: '12345',
+        chargingState: 'Idle'
+      },
+      meterValue: []
+    };
+
+    this.csms.handleTransactionEventRequest(transactionEventRequest);
+  }
+
+  public disconnectChargingStationSide(): void {
+    const statusNotificationRequest: StatusNotificationRequest = {
+      timestamp: new Date().toISOString(),
+      connectorStatus: 'Available',
+      evseId: 1,
+      connectorId: 1
+    };
+
+    const notifyEventRequest: NotifyEventRequest = {
+      generatedAt: new Date().toISOString(),
+      seqNo: 1,
+      eventData: [{
+        eventId: 1,
+        timestamp: new Date().toISOString(),
+        trigger: 'Delta',
+        actualValue: 'Available',
+        component: {
+          name: 'Connector',
+          instance: '1'
+        },
+        variable: {
+          name: 'AvailabilityState'
+        }
+      }]
+    };
+
+    this.csms.handleStatusNotificationRequest(statusNotificationRequest);
+    this.csms.handleNotifyEventRequest(notifyEventRequest);
+  }
+}
+
+class CSMS {
+  public handleTransactionEventRequest(request: TransactionEventRequest): void {
+    console.log('Received TransactionEventRequest:', request);
+    // Implement CSMS logic here
+  }
+
+  public handleStatusNotificationRequest(request: StatusNotificationRequest): void {
+    console.log('Received StatusNotificationRequest:', request);
+    // Implement CSMS logic here
+  }
+
+  public handleNotifyEventRequest(request: NotifyEventRequest): void {
+    console.log('Received NotifyEventRequest:', request);
+    // Implement CSMS logic here
+  }
+}
+
+// Test scenario
+function runTestScenario() {
+  const csms = new CSMS();
+  const chargingStation = new ChargingStation(csms);
+
+  console.log('Step 1: Disconnect EV and EVSE on EV side');
+  chargingStation.disconnectEVSide();
+
+  console.log('Step 2: Disconnect EV and EVSE on Charging Station side');
+  chargingStation.disconnectChargingStationSide();
+}
+
+runTestScenario();
