@@ -1,0 +1,64 @@
+import { 
+  OCPPClient, 
+  GetTransactionStatusRequest, 
+  GetTransactionStatusResponse,
+  TransactionEventRequest,
+  TransactionEventResponse
+} from 'ocpp-ts'; // Replace with actual OCPP 2.0.1 library
+
+async function main() {
+  console.log('Starting test scenario for checking transaction status...');
+
+  // Create OCPP client
+  const client = new OCPPClient('ws://charging-station-url');
+
+  try {
+    // Connect to charging station
+    await client.connect();
+
+    // Step 1-2: Close WebSocket connection and wait before reconnecting
+    await client.disconnect();
+    const retryBackOffWaitMinimum = 30; // Replace with actual configured value
+    await new Promise(resolve => setTimeout(resolve, retryBackOffWaitMinimum * 1000));
+    await client.connect();
+
+    // Step 3-4: Send GetTransactionStatusRequest
+    const transactionId = 'ongoing'; // Replace with actual transaction ID
+    const getStatusRequest: GetTransactionStatusRequest = {
+      transactionId
+    };
+    const getStatusResponse: GetTransactionStatusResponse = await client.sendGetTransactionStatus(getStatusRequest);
+
+    console.log('GetTransactionStatusResponse:', getStatusResponse);
+    if (getStatusResponse.ongoingIndicator !== true || getStatusResponse.messagesInQueue !== true) {
+      throw new Error('Unexpected GetTransactionStatusResponse');
+    }
+
+    // Step 5-6: Handle queued TransactionEventRequests
+    let transactionEventRequest: TransactionEventRequest;
+    do {
+      transactionEventRequest = await client.receiveTransactionEvent();
+      console.log('Received TransactionEventRequest:', transactionEventRequest);
+
+      if (transactionEventRequest.eventType !== 'Updated' || 
+          !transactionEventRequest.meterValue ||
+          transactionEventRequest.offline !== true) {
+        throw new Error('Unexpected TransactionEventRequest');
+      }
+
+      const transactionEventResponse: TransactionEventResponse = {
+        // Add necessary response fields
+      };
+      await client.sendTransactionEventResponse(transactionEventResponse);
+
+    } while (client.hasQueuedMessages());
+
+    console.log('Test scenario completed successfully.');
+  } catch (error) {
+    console.error('Error in test scenario:', error);
+  } finally {
+    await client.disconnect();
+  }
+}
+
+main();
