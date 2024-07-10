@@ -1,0 +1,77 @@
+// Import necessary types
+type SampledValueType = {
+  value: string;
+  context?: string;
+  measurand?: string;
+  phase?: string;
+  location?: string;
+  unit?: string;
+};
+
+type MeterValueType = {
+  timestamp: string;
+  sampledValue: SampledValueType[];
+};
+
+// Define the EventType enum
+enum EventType {
+  Started = 'Started',
+  Updated = 'Updated',
+  Ended = 'Ended'
+}
+
+// Define the configuration variables
+const SampledDataTxStartedMeasurands: string[] = ['Energy.Active.Import.Register', 'Power.Active.Import'];
+const SampledDataTxUpdatedMeasurands: string[] = ['Energy.Active.Import.Register', 'Power.Active.Import'];
+const SampledDataTxEndedMeasurands: string[] = ['Energy.Active.Import.Register', 'Power.Active.Import'];
+const AlignedDataTxEndedMeasurands: string[] = ['Energy.Active.Import.Register', 'Power.Active.Import'];
+
+// Define the MeterValue class
+class MeterValue {
+  timestamp: string;
+  sampledValue: SampledValueType[];
+
+  constructor(eventType: EventType) {
+    this.timestamp = new Date().toISOString();
+    this.sampledValue = this.getSampledValues(eventType);
+  }
+
+  private getSampledValues(eventType: EventType): SampledValueType[] {
+    let measurands: string[];
+
+    switch (eventType) {
+      case EventType.Started:
+        measurands = SampledDataTxStartedMeasurands;
+        break;
+      case EventType.Updated:
+        measurands = SampledDataTxUpdatedMeasurands;
+        break;
+      case EventType.Ended:
+        measurands = [...SampledDataTxEndedMeasurands, ...AlignedDataTxEndedMeasurands];
+        break;
+      default:
+        measurands = [];
+    }
+
+    return measurands.map(measurand => ({
+      value: this.getSampledValue(measurand),
+      measurand
+    }));
+  }
+
+  private getSampledValue(measurand: string): string {
+    // Placeholder function to simulate getting a sampled value
+    // In a real implementation, this would interface with the hardware to get the actual value
+    return (Math.random() * 100).toFixed(2);
+  }
+}
+
+// Example usage
+const meterValueStarted = new MeterValue(EventType.Started);
+console.log(meterValueStarted);
+
+const meterValueUpdated = new MeterValue(EventType.Updated);
+console.log(meterValueUpdated);
+
+const meterValueEnded = new MeterValue(EventType.Ended);
+console.log(meterValueEnded);
