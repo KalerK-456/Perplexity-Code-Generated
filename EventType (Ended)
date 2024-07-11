@@ -1,0 +1,66 @@
+// Define the TransactionEventEnumType
+enum TransactionEventEnumType {
+    Started = 'Started',
+    Updated = 'Updated',
+    Ended = 'Ended'
+}
+
+// Define the TriggerReasonEnumType (simplified, add more reasons as needed)
+enum TriggerReasonEnumType {
+    Authorized = 'Authorized',
+    EVCommunicationLost = 'EVCommunicationLost',
+    EVConnectTimeout = 'EVConnectTimeout',
+    MeterValueClock = 'MeterValueClock',
+    MeterValuePeriodic = 'MeterValuePeriodic',
+    TimeLimitReached = 'TimeLimitReached',
+    Trigger = 'Trigger',
+    UnlockCommand = 'UnlockCommand',
+    StopAuthorized = 'StopAuthorized',
+    EVDeparted = 'EVDeparted',
+    EVDetected = 'EVDetected',
+    RemoteStop = 'RemoteStop',
+    AbnormalCondition = 'AbnormalCondition'
+}
+
+// Simplified TransactionType
+interface TransactionType {
+    transactionId: string;
+    // Other transaction-related fields
+}
+
+// Define the TransactionEvent message structure
+interface TransactionEvent {
+    eventType: TransactionEventEnumType;
+    timestamp: string; // ISO 8601 format
+    triggerReason: TriggerReasonEnumType; // New field
+    seqNo: number; // New field
+    transactionInfo: TransactionType;
+    // Other fields as per OCPP 2.0.1 specification
+}
+
+// Main EventType function
+class EventType {
+    static ended(
+        timestamp: string,
+        triggerReason: TriggerReasonEnumType,
+        seqNo: number,
+        transactionInfo: TransactionType
+    ): TransactionEvent {
+        return {
+            eventType: TransactionEventEnumType.Ended,
+            timestamp,
+            triggerReason,
+            seqNo,
+            transactionInfo
+        };
+    }
+}
+
+// Example usage
+const endedEvent = EventType.ended(
+    new Date().toISOString(),
+    TriggerReasonEnumType.RemoteStop,
+    1,
+    { transactionId: '12345' }
+);
+console.log(endedEvent);
