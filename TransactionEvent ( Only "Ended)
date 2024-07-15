@@ -1,0 +1,106 @@
+public async handleTransactionEvent(headers: OCPPHeader, transactionEvent: OCPPTransactionEventRequestExtended201): Promise<any> {
+  const { chargingStation, tenant } = headers;
+
+  // Check props
+  OCPPValidator.getInstance().validateTransactionEvent201(headers, transactionEvent);
+  this.enrichTransactionEvent(tenant, transactionEvent, chargingStation);
+
+  if (transactionEvent.eventType === OCPPTransactionEventEnumType.STARTED) {
+    // Existing STARTED event handling code
+    // ...
+  } else if (transactionEvent.eventType === OCPPTransactionEventEnumType.UPDATED) {
+    // Existing UPDATED event handling code
+    // ...
+  } else if (transactionEvent.eventType === OCPPTransactionEventEnumType.ENDED) {
+    try {
+      console.log('handleTransactionEvent=Stopping');
+      console.log('handleTransactionEvent=stopTransaction=333333', transactionEvent);
+
+      // Convert transactionEvent to stopTransaction format
+      const stopTransaction: OCPPStopTransactionRequestExtended = {
+        transactionId: transactionEvent.transactionInfo.transactionId,
+        meterStop: transactionEvent.meterValue?.[0]?.sampledValue?.[0]?.value ?? 0,
+        timestamp: transactionEvent.timestamp,
+        // Add other necessary fields
+      };
+
+      // Get Transaction
+      const transaction = await this.getTransactionFromStopTransaction(tenant, chargingStation, headers, stopTransaction);
+
+      // Get Tag ID that stopped the Transaction
+      const tagID = this.getStopTransactionTagId(stopTransaction, transaction);
+
+      // Transaction is stopped by central system?
+      const { user, alternateUser } = await this.checkAuthorizeStopTransactionAndGetUsers(
+        tenant, chargingStation, transaction, tagID, false
+      );
+
+      // Free the connector
+      OCPPUtils.clearChargingStationConnectorRuntimeData(chargingStation, transaction.connectorId);
+
+      // Save Charging Station
+      await ChargingStationStorage.saveChargingStation(tenant, chargingStation);
+
+      // Check and apply last consumption
+      await this.checkAndApplyLastConsumptionInStopTransaction(tenant, chargingStation, transaction, stopTransaction, user);
+
+      // Signed Data
+      this.checkAndUpdateTransactionWithSignedDataInStopTransaction(transaction, stopTransaction);
+
+      // Update Transaction with Stop Transaction and Stop MeterValues
+      OCPPUtils.updateTransactionWithStopTransaction(transaction, chargingStation, stopTransaction, user, alternateUser, tagID, false);
+
+      // Bill
+      await BillingFacade.processStopTransaction(tenant, transaction, transaction.user);
+
+      // OCPI
+      await OCPIFacade.processStopTransaction(tenant, transaction, chargingStation, chargingStation.siteArea, user, ServerAction.OCPP_STOP_TRANSACTION);
+
+      // OICP
+      await OICPFacade.processStopTransaction(tenant, transaction, chargingStation, chargingStation.siteArea, user, ServerAction.OCPP_STOP_TRANSACTION);
+
+      // Save the transaction
+      await TransactionStorage.saveTransaction(tenant, transaction);
+
+      // Notify
+      NotificationHelper.notifyStopTransaction(tenant, chargingStation, transaction, user, alternateUser);
+
+      // Recompute the Smart Charging Plan
+      await this.triggerSmartChargingStopTransaction(tenant, chargingStation, transaction);
+
+      await Logging.logInfo({
+        ...LoggingHelper.getChargingStationProperties(chargingStation),
+        tenantID: tenant.id,
+        module: MODULE_NAME, method: 'handleTransactionEvent',
+        action: ServerAction.OCPP_STOP_TRANSACTION,
+        user: alternateUser ?? (user ?? null),
+        actionOnUser: alternateUser ? (user ?? null) : null,
+        message: `${Utils.buildConnectorInfo(transaction.connectorId, transaction.id)} Transaction has been stopped successfully`,
+        detailedMessages: { stopTransaction }
+      });
+
+      // Accepted
+      return {
+        idTagInfo: {
+          status: OCPPAuthorizationStatus.ACCEPTED
+        }
+      };
+    } catch (error) {
+      this.addChargingStationToException(error, headers.chargeBoxIdentity);
+      await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_STOP_TRANSACTION, error, { stopTransaction: transactionEvent });
+      // Invalid
+      return {
+        idTagInfo: {
+          status: OCPPAuthorizationStatus.INVALID
+        }
+      };
+    }
+  }
+
+  // If the event type is not handled, return an error or default response
+  return {
+    idTagInfo: {
+      status: OCPPAuthorizationStatus.INVALID
+    }
+  };
+}
