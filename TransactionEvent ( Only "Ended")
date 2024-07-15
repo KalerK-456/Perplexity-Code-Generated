@@ -9,8 +9,16 @@ public async handleTransactionEvent(headers: OCPPHeader, transactionEvent: OCPPT
     // Existing STARTED event handling code
     // ...
   } else if (transactionEvent.eventType === OCPPTransactionEventEnumType.UPDATED) {
-    // Existing UPDATED event handling code
-    // ...
+     try {
+      // Integrate handleMeterValues code here
+      console.log('calling=====handleMeterValues===');
+      await this.handleMeterValues(headers, transactionEvent.meterValues);
+    } catch (error) {
+      this.addChargingStationToException(error, headers.chargeBoxIdentity);
+      await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_METER_VALUES, error, { meterValues: transactionEvent.meterValues });
+      return {};
+    }
+  
   } else if (transactionEvent.eventType === OCPPTransactionEventEnumType.ENDED) {
     try {
       console.log('handleTransactionEvent=Stopping');
