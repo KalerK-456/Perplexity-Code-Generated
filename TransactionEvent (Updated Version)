@@ -1,12 +1,22 @@
-public async handleTransactionEvent(headers: OCPPHeader, transactionEvent: OCPPTransactionEventRequestExtended201): Promise<any> {
+import { OCPPHeader, OCPPTransactionEventRequestExtended201, OCPPStartTransactionRequestExtended, OCPPStopTransactionRequestExtended, OCPPTransactionEventEnumType, OCPPAuthorizationStatus, ServerAction, Action } from './types'; // Adjust the import path as needed
+import { OCPPValidator, CommonUtilsService, Utils, OCPPUtils, PricingFacade, BillingFacade, OCPIFacade, OICPFacade, NotificationHelper, Logging, LoggingHelper, TransactionStorage, ChargingStationStorage, UtilsService } from './services'; // Adjust the import path as needed
+
+interface Tenant {
+  id: string;
+  // Add other properties of Tenant as needed
+}
+
+interface TransactionEventResponse {
+  transactionId?: number;
+  idTagInfo: {
+    status: OCPPAuthorizationStatus;
+  };
+}
+
+public async handleTransactionEvent(headers: OCPPHeader, transactionEvent: OCPPTransactionEventRequestExtended201): Promise<TransactionEventResponse> {
   const { chargingStation, tenant } = headers;
 
   // Check props
-  OCPPValidator.getInstance().validateTransactionEvent201(headers, transactionEvent);
-  this.enrichTransactionEvent(tenant, transactionEvent, chargingStation);
-
-  if (transactionEvent.eventType === OCPPTransactionEventEnumType.STARTED) {
-     // Check props
   OCPPValidator.getInstance().validateTransactionEvent201(headers, transactionEvent);
 
   this.enrichTransactionEvent(tenant, transactionEvent, chargingStation);
@@ -66,7 +76,6 @@ public async handleTransactionEvent(headers: OCPPHeader, transactionEvent: OCPPT
 
         // Get charging limit data
         const chargingLimitData = await UtilsService.getChargingLimit(tenant, newTransaction);
-        console.log('chargingLimitData======', chargingLimitData);
 
         if (chargingLimitData) {
           const getFinalLimitDetails = await UtilsService.calculatePriceLimit(tenant, newTransaction, chargingStation, chargingLimitData.unitKey, chargingLimitData.unitValue);
@@ -74,43 +83,46 @@ public async handleTransactionEvent(headers: OCPPHeader, transactionEvent: OCPPT
           newTransaction.unitValue = chargingLimitData.unitValue;
           newTransaction.charginglimit = getFinalLimitDetails.totalTaxedPrice;
           newTransaction.charginglimitWithTaxes = getFinalLimitDetails.totalPrice;
+
+          // Save it
+          await TransactionStorage.saveTransaction(tenant, newTransaction);
+
+          // Clean up
+          await OCPPUtils.updateChargingStationConnectorRuntimeDataWithTransaction(tenant, chargingStation, newTransaction);
+
+          // Save
+          await ChargingStationStorage.saveChargingStation(tenant, chargingStation);
+
+          // Delete charging limit
+          await UtilsService.deleteChargingLimit(tenant, newTransaction);
+
+          // Notify
+          NotificationHelper.notifyStartTransaction(tenant, newTransaction, chargingStation, user);
+
+          await Logging.logInfo({
+            ...LoggingHelper.getChargingStationProperties(chargingStation),
+            tenantID: tenant.id,
+            module: MODULE_NAME,
+            method: 'handleStartTransaction',
+            action: ServerAction.OCPP_START_TRANSACTION,
+            user: user,
+            message: `${Utils.buildConnectorInfo(newTransaction.connectorId, newTransaction.id)} Transaction has been started successfully`,
+            detailedMessages: { transaction: newTransaction, startTransaction }
+          });
+
+          // Accepted
+          return {
+            transactionId: newTransaction.id,
+            idTagInfo: {
+              status: OCPPAuthorizationStatus.ACCEPTED
+            }
+          };
         }
-
-        // Save it
-        await TransactionStorage.saveTransaction(tenant, newTransaction);
-
-        // Clean up
-        await OCPPUtils.updateChargingStationConnectorRuntimeDataWithTransaction(tenant, chargingStation, newTransaction);
-
-        // Save
-        await ChargingStationStorage.saveChargingStation(tenant, chargingStation);
-
-        // Delete charging limit
-        await UtilsService.deleteChargingLimit(tenant, newTransaction);
-
-        // Notify
-        NotificationHelper.notifyStartTransaction(tenant, newTransaction, chargingStation, user);
-
-        await Logging.logInfo({
-          ...LoggingHelper.getChargingStationProperties(chargingStation),
-          tenantID: tenant.id,
-          module: MODULE_NAME, method: 'handleStartTransaction',
-          action: ServerAction.OCPP_START_TRANSACTION, user: user,
-          message: `${Utils.buildConnectorInfo(newTransaction.connectorId, newTransaction.id)} Transaction has been started successfully`,
-          detailedMessages: { transaction: newTransaction, startTransaction }
-        });
-
-        // Accepted
-        return {
-          transactionId: newTransaction.id,
-          idTagInfo: {
-            status: OCPPAuthorizationStatus.ACCEPTED
-          }
-        };
       }
     } catch (error) {
       this.addChargingStationToException(error, headers.chargeBoxIdentity);
       await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_START_TRANSACTION, error, { startTransaction });
+
       // Invalid
       return {
         transactionId: 0,
@@ -120,21 +132,16 @@ public async handleTransactionEvent(headers: OCPPHeader, transactionEvent: OCPPT
       };
     }
   } else if (transactionEvent.eventType === OCPPTransactionEventEnumType.UPDATED) {
-     try {
+    try {
       // Integrate handleMeterValues code here
-      console.log('calling=====handleMeterValues===');
       await this.handleMeterValues(headers, transactionEvent.meterValues);
     } catch (error) {
       this.addChargingStationToException(error, headers.chargeBoxIdentity);
       await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_METER_VALUES, error, { meterValues: transactionEvent.meterValues });
       return {};
     }
-  
   } else if (transactionEvent.eventType === OCPPTransactionEventEnumType.ENDED) {
     try {
-      console.log('handleTransactionEvent=Stopping');
-      console.log('handleTransactionEvent=stopTransaction=333333', transactionEvent);
-
       // Convert transactionEvent to stopTransaction format
       const stopTransaction: OCPPStopTransactionRequestExtended = {
         transactionId: transactionEvent.transactionInfo.transactionId,
@@ -190,7 +197,8 @@ public async handleTransactionEvent(headers: OCPPHeader, transactionEvent: OCPPT
       await Logging.logInfo({
         ...LoggingHelper.getChargingStationProperties(chargingStation),
         tenantID: tenant.id,
-        module: MODULE_NAME, method: 'handleTransactionEvent',
+        module: MODULE_NAME,
+        method: 'handleTransactionEvent',
         action: ServerAction.OCPP_STOP_TRANSACTION,
         user: alternateUser ?? (user ?? null),
         actionOnUser: alternateUser ? (user ?? null) : null,
@@ -207,6 +215,7 @@ public async handleTransactionEvent(headers: OCPPHeader, transactionEvent: OCPPT
     } catch (error) {
       this.addChargingStationToException(error, headers.chargeBoxIdentity);
       await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_STOP_TRANSACTION, error, { stopTransaction: transactionEvent });
+
       // Invalid
       return {
         idTagInfo: {
