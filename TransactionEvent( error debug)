@@ -1,0 +1,234 @@
+import { OCPPHeader, OCPPTransactionEventRequestExtended201, OCPPStartTransactionRequestExtended, OCPPStopTransactionRequestExtended, OCPPTransactionEventEnumType, OCPPAuthorizationStatus, ServerAction, Action } from './types'; // Adjust the import path as needed
+import { OCPPValidator, CommonUtilsService, Utils, OCPPUtils, PricingFacade, BillingFacade, OCPIFacade, OICPFacade, NotificationHelper, Logging, LoggingHelper, TransactionStorage, ChargingStationStorage, UtilsService } from './services'; // Adjust the import path as needed
+
+interface Tenant {
+  id: string;
+  // Add other properties of Tenant as needed
+}
+
+interface TransactionEventResponse {
+  transactionId?: number;
+  idTagInfo: {
+    status: OCPPAuthorizationStatus;
+  };
+}
+
+public async handleTransactionEvent(headers: OCPPHeader, transactionEvent: OCPPTransactionEventRequestExtended201): Promise<TransactionEventResponse> {
+  const { chargingStation, tenant } = headers;
+
+  // Check props
+  OCPPValidator.getInstance().validateTransactionEvent201(headers, transactionEvent);
+
+  this.enrichTransactionEvent(tenant, transactionEvent, chargingStation);
+
+  if (transactionEvent.eventType === OCPPTransactionEventEnumType.STARTED) {
+    try {
+      const startTransaction: OCPPStartTransactionRequestExtended = {
+        connectorId: Number(transactionEvent.evse?.id.toString().concat(transactionEvent.evse?.connectorId.toString())),
+        idTag: transactionEvent.idToken.idToken,
+        tagID: transactionEvent.idToken.idToken,
+        meterStart: 0,
+        chargeBoxID: chargingStation.id,
+        timezone: Utils.getTimezone(chargingStation.coordinates),
+        timestamp: transactionEvent.timestamp,
+        siteAreaID: chargingStation.siteAreaID,
+        siteID: chargingStation.siteID,
+        companyID: chargingStation.companyID,
+        userID: null
+      };
+
+      this.enrichStartTransaction(tenant, startTransaction, chargingStation);
+
+      // Create Transaction
+      const newTransaction = await this.createTransaction201(tenant, startTransaction, transactionEvent);
+
+      // Check User
+      const { user, tag } = await CommonUtilsService.isAuthorizedToStartTransaction(
+        tenant, chargingStation, startTransaction.tagID, newTransaction, ServerAction.OCPP_START_TRANSACTION, Action.START_TRANSACTION
+      );
+
+      if (user) {
+        startTransaction.userID = user.id;
+        newTransaction.userID = user.id;
+        newTransaction.user = user;
+        newTransaction.authorizationID = user.authorizationID;
+
+        // Cleanup ongoing Transaction
+        await this.processExistingTransaction(tenant, chargingStation, startTransaction.connectorId);
+
+        // Handle Car
+        await this.processTransactionCar(tenant, newTransaction, chargingStation, null, user, TransactionAction.START);
+
+        // Create consumption
+        const firstConsumption = await OCPPUtils.createFirstConsumption(tenant, chargingStation, newTransaction);
+
+        // Pricing
+        await PricingFacade.processStartTransaction(tenant, newTransaction, chargingStation, firstConsumption, user);
+
+        // Billing
+        await BillingFacade.processStartTransaction(tenant, newTransaction, chargingStation, chargingStation.siteArea, user);
+
+        // OCPI
+        await OCPIFacade.processStartTransaction(tenant, newTransaction, chargingStation, chargingStation.siteArea, tag, user, ServerAction.OCPP_START_TRANSACTION);
+
+        // OICP
+        await OICPFacade.processStartTransaction(tenant, newTransaction, chargingStation, chargingStation.siteArea, user, ServerAction.OCPP_START_TRANSACTION);
+
+        // Get charging limit data
+        const chargingLimitData = await UtilsService.getChargingLimit(tenant, newTransaction);
+
+        if (chargingLimitData) {
+          const getFinalLimitDetails = await UtilsService.calculatePriceLimit(tenant, newTransaction, chargingStation, chargingLimitData.unitKey, chargingLimitData.unitValue);
+          newTransaction.unitKey = chargingLimitData.unitKey;
+          newTransaction.unitValue = chargingLimitData.unitValue;
+          newTransaction.charginglimit = getFinalLimitDetails.totalTaxedPrice;
+          newTransaction.charginglimitWithTaxes = getFinalLimitDetails.totalPrice;
+
+          // Save it
+          await TransactionStorage.saveTransaction(tenant, newTransaction);
+
+          // Clean up
+          await OCPPUtils.updateChargingStationConnectorRuntimeDataWithTransaction(tenant, chargingStation, newTransaction);
+
+          // Save
+          await ChargingStationStorage.saveChargingStation(tenant, chargingStation);
+
+          // Delete charging limit
+          await UtilsService.deleteChargingLimit(tenant, newTransaction);
+
+          // Notify
+          NotificationHelper.notifyStartTransaction(tenant, newTransaction, chargingStation, user);
+
+          await Logging.logInfo({
+            ...LoggingHelper.getChargingStationProperties(chargingStation),
+            tenantID: tenant.id,
+            module: MODULE_NAME,
+            method: 'handleStartTransaction',
+            action: ServerAction.OCPP_START_TRANSACTION,
+            user: user,
+            message: `${Utils.buildConnectorInfo(newTransaction.connectorId, newTransaction.id)} Transaction has been started successfully`,
+            detailedMessages: { transaction: newTransaction, startTransaction }
+          });
+
+          // Accepted
+          return {
+            transactionId: newTransaction.id,
+            idTagInfo: {
+              status: OCPPAuthorizationStatus.ACCEPTED
+            }
+          };
+        }
+      }
+    } catch (error) {
+      this.addChargingStationToException(error, headers.chargeBoxIdentity);
+      await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_START_TRANSACTION, error, { startTransaction });
+
+      // Invalid
+      return {
+        transactionId: 0,
+        idTagInfo: {
+          status: OCPPAuthorizationStatus.INVALID
+        }
+      };
+    }
+  } else if (transactionEvent.eventType === OCPPTransactionEventEnumType.UPDATED) {
+    try {
+      // Integrate handleMeterValues code here
+      await this.handleMeterValues(headers, transactionEvent.meterValues);
+    } catch (error) {
+      this.addChargingStationToException(error, headers.chargeBoxIdentity);
+      await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_METER_VALUES, error, { meterValues: transactionEvent.meterValues });
+      return {};
+    }
+  } else if (transactionEvent.eventType === OCPPTransactionEventEnumType.ENDED) {
+    try {
+      // Convert transactionEvent to stopTransaction format
+      const stopTransaction: OCPPStopTransactionRequestExtended = {
+        transactionId: transactionEvent.transactionInfo.transactionId,
+        meterStop: transactionEvent.meterValue?.[0]?.sampledValue?.[0]?.value ?? 0,
+        timestamp: transactionEvent.timestamp,
+        // Add other necessary fields
+      };
+
+      // Get Transaction
+      const transaction = await this.getTransactionFromStopTransaction(tenant, chargingStation, headers, stopTransaction);
+
+      // Get Tag ID that stopped the Transaction
+      const tagID = this.getStopTransactionTagId(stopTransaction, transaction);
+
+      // Transaction is stopped by central system?
+      const { user, alternateUser } = await this.checkAuthorizeStopTransactionAndGetUsers(
+        tenant, chargingStation, transaction, tagID, false
+      );
+
+      // Free the connector
+      OCPPUtils.clearChargingStationConnectorRuntimeData(chargingStation, transaction.connectorId);
+
+      // Save Charging Station
+      await ChargingStationStorage.saveChargingStation(tenant, chargingStation);
+
+      // Check and apply last consumption
+      await this.checkAndApplyLastConsumptionInStopTransaction(tenant, chargingStation, transaction, stopTransaction, user);
+
+      // Signed Data
+      this.checkAndUpdateTransactionWithSignedDataInStopTransaction(transaction, stopTransaction);
+
+      // Update Transaction with Stop Transaction and Stop MeterValues
+      OCPPUtils.updateTransactionWithStopTransaction(transaction, chargingStation, stopTransaction, user, alternateUser, tagID, false);
+
+      // Bill
+      await BillingFacade.processStopTransaction(tenant, transaction, transaction.user);
+
+      // OCPI
+      await OCPIFacade.processStopTransaction(tenant, transaction, chargingStation, chargingStation.siteArea, user, ServerAction.OCPP_STOP_TRANSACTION);
+
+      // OICP
+      await OICPFacade.processStopTransaction(tenant, transaction, chargingStation, chargingStation.siteArea, user, ServerAction.OCPP_STOP_TRANSACTION);
+
+      // Save the transaction
+      await TransactionStorage.saveTransaction(tenant, transaction);
+
+      // Notify
+      NotificationHelper.notifyStopTransaction(tenant, chargingStation, transaction, user, alternateUser);
+
+      // Recompute the Smart Charging Plan
+      await this.triggerSmartChargingStopTransaction(tenant, chargingStation, transaction);
+
+      await Logging.logInfo({
+        ...LoggingHelper.getChargingStationProperties(chargingStation),
+        tenantID: tenant.id,
+        module: MODULE_NAME,
+        method: 'handleTransactionEvent',
+        action: ServerAction.OCPP_STOP_TRANSACTION,
+        user: alternateUser ?? (user ?? null),
+        actionOnUser: alternateUser ? (user ?? null) : null,
+        message: `${Utils.buildConnectorInfo(transaction.connectorId, transaction.id)} Transaction has been stopped successfully`,
+        detailedMessages: { stopTransaction }
+      });
+
+      // Accepted
+      return {
+        idTagInfo: {
+          status: OCPPAuthorizationStatus.ACCEPTED
+        }
+      };
+    } catch (error) {
+      this.addChargingStationToException(error, headers.chargeBoxIdentity);
+      await Logging.logActionExceptionMessage(headers.tenantID, ServerAction.OCPP_STOP_TRANSACTION, error, { stopTransaction: transactionEvent });
+
+      // Invalid
+      return {
+        idTagInfo: {
+          status: OCPPAuthorizationStatus.INVALID
+        }
+      };
+    }
+  }
+
+  // If the event type is not handled, return an error or default response
+  return {
+    idTagInfo: {
+      status: OCPPAuthorizationStatus.INVALID
+    }
+  };
+}
