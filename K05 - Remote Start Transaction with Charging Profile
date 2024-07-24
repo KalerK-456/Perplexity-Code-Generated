@@ -1,0 +1,79 @@
+// Import necessary types and interfaces
+import {
+  RequestStartTransactionRequest,
+  RequestStartTransactionResponse,
+  ChargingProfile,
+  ChargingProfilePurposeType,
+  ChargingProfileKindType,
+  ChargingRateUnitType,
+  ChargingSchedule,
+  ChargingSchedulePeriod,
+  Status,
+} from 'ocpp-types'; // Assuming these types are defined in 'ocpp-types' package
+
+// Define the ChargingProfile
+const createChargingProfile = (): ChargingProfile => {
+  const chargingSchedulePeriod: ChargingSchedulePeriod = {
+    startPeriod: 0,
+    limit: 20.0,
+  };
+
+  const chargingSchedule: ChargingSchedule = {
+    duration: 3600, // 1 hour
+    chargingRateUnit: ChargingRateUnitType.WATT,
+    chargingSchedulePeriod: [chargingSchedulePeriod],
+  };
+
+  const chargingProfile: ChargingProfile = {
+    chargingProfileId: 1,
+    stackLevel: 1,
+    chargingProfilePurpose: ChargingProfilePurposeType.TX_PROFILE,
+    chargingProfileKind: ChargingProfileKindType.ABSOLUTE,
+    chargingSchedule: chargingSchedule,
+  };
+
+  return chargingProfile;
+};
+
+// Define the RequestStartTransactionRequest
+const createRequestStartTransactionRequest = (
+  idToken: string,
+  evseId: number
+): RequestStartTransactionRequest => {
+  const chargingProfile = createChargingProfile();
+
+  const request: RequestStartTransactionRequest = {
+    idToken: {
+      id: idToken,
+      type: 'ISO14443', // Example token type
+    },
+    evseId: evseId,
+    chargingProfile: chargingProfile,
+  };
+
+  return request;
+};
+
+// Define the RequestStartTransactionResponse
+const handleRequestStartTransactionResponse = (
+  response: RequestStartTransactionResponse
+): void => {
+  if (response.status === Status.ACCEPTED) {
+    console.log('Transaction started successfully');
+  } else {
+    console.error('Failed to start transaction:', response.status);
+  }
+};
+
+// Example usage
+const idToken = 'AA12345'; // Example token
+const evseId = 1; // Example EVSE ID
+
+const request = createRequestStartTransactionRequest(idToken, evseId);
+
+// Simulate sending the request and receiving a response
+const mockResponse: RequestStartTransactionResponse = {
+  status: Status.ACCEPTED,
+};
+
+handleRequestStartTransactionResponse(mockResponse);
