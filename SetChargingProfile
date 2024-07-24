@@ -2,25 +2,25 @@
 interface ChargingProfileType {
   id: number;
   stackLevel: number;
-  chargingProfilePurpose: string;
-  chargingProfileKind: string;
-  recurrencyKind?: string;
-  validFrom?: string;
-  validTo?: string;
+  chargingProfilePurpose: ChargingProfilePurposeEnumType;
+  chargingProfileKind: ChargingProfileKindEnumType;
+  recurrencyKind?: RecurrencyKindEnumType;
+  validFrom?: string; // ISO 8601 format
+  validTo?: string; // ISO 8601 format
   chargingSchedule: ChargingScheduleType[];
 }
 
 interface ChargingScheduleType {
-  duration?: number;
-  startSchedule: string;
-  chargingRateUnit: string;
+  duration?: number; // in seconds
+  startSchedule: string; // ISO 8601 format
+  chargingRateUnit: ChargingRateUnitEnumType;
   chargingSchedulePeriod: ChargingSchedulePeriodType[];
-  minChargingRate?: number;
+  minChargingRate?: number; // in the unit of chargingRateUnit
 }
 
 interface ChargingSchedulePeriodType {
-  startPeriod: number;
-  limit: number;
+  startPeriod: number; // in seconds
+  limit: number; // in the unit of chargingRateUnit
   numberPhases?: number;
 }
 
@@ -35,8 +35,37 @@ interface StatusInfoType {
 }
 
 interface SetChargingProfileResponse {
-  status: string;
+  status: ChargingProfileStatusEnumType;
   statusInfo?: StatusInfoType;
+}
+
+// Enumerations
+enum ChargingProfilePurposeEnumType {
+  ChargePointMaxProfile = "ChargePointMaxProfile",
+  TxDefaultProfile = "TxDefaultProfile",
+  TxProfile = "TxProfile"
+}
+
+enum ChargingProfileKindEnumType {
+  Absolute = "Absolute",
+  Recurring = "Recurring",
+  Relative = "Relative"
+}
+
+enum RecurrencyKindEnumType {
+  Daily = "Daily",
+  Weekly = "Weekly"
+}
+
+enum ChargingRateUnitEnumType {
+  W = "W",
+  A = "A"
+}
+
+enum ChargingProfileStatusEnumType {
+  Accepted = "Accepted",
+  Rejected = "Rejected",
+  NotSupported = "NotSupported"
 }
 
 // Example function to create a SetChargingProfileRequest
@@ -49,7 +78,7 @@ function createSetChargingProfileRequest(evseId: number, chargingProfile: Chargi
 
 // Example function to handle SetChargingProfileResponse
 function handleSetChargingProfileResponse(response: SetChargingProfileResponse) {
-  if (response.status === "Accepted") {
+  if (response.status === ChargingProfileStatusEnumType.Accepted) {
     console.log("Charging profile set successfully.");
   } else {
     console.error(`Failed to set charging profile: ${response.statusInfo?.reasonCode} - ${response.statusInfo?.additionalInfo}`);
@@ -60,14 +89,14 @@ function handleSetChargingProfileResponse(response: SetChargingProfileResponse) 
 const chargingProfile: ChargingProfileType = {
   id: 1,
   stackLevel: 0,
-  chargingProfilePurpose: "TxProfile",
-  chargingProfileKind: "Absolute",
+  chargingProfilePurpose: ChargingProfilePurposeEnumType.TxProfile,
+  chargingProfileKind: ChargingProfileKindEnumType.Absolute,
   validFrom: "2023-07-24T00:00:00Z",
   validTo: "2023-07-24T23:59:59Z",
   chargingSchedule: [
     {
       startSchedule: "2023-07-24T00:00:00Z",
-      chargingRateUnit: "W",
+      chargingRateUnit: ChargingRateUnitEnumType.W,
       chargingSchedulePeriod: [
         { startPeriod: 0, limit: 10000 },
         { startPeriod: 3600, limit: 5000 }
@@ -80,7 +109,7 @@ const request = createSetChargingProfileRequest(1, chargingProfile);
 
 // Simulate sending the request and receiving a response
 const simulatedResponse: SetChargingProfileResponse = {
-  status: "Accepted"
+  status: ChargingProfileStatusEnumType.Accepted
 };
 
 handleSetChargingProfileResponse(simulatedResponse);
