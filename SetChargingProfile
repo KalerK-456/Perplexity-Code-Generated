@@ -1,0 +1,86 @@
+// Import necessary types and interfaces
+interface ChargingProfileType {
+  id: number;
+  stackLevel: number;
+  chargingProfilePurpose: string;
+  chargingProfileKind: string;
+  recurrencyKind?: string;
+  validFrom?: string;
+  validTo?: string;
+  chargingSchedule: ChargingScheduleType[];
+}
+
+interface ChargingScheduleType {
+  duration?: number;
+  startSchedule: string;
+  chargingRateUnit: string;
+  chargingSchedulePeriod: ChargingSchedulePeriodType[];
+  minChargingRate?: number;
+}
+
+interface ChargingSchedulePeriodType {
+  startPeriod: number;
+  limit: number;
+  numberPhases?: number;
+}
+
+interface SetChargingProfileRequest {
+  evseId: number;
+  chargingProfile: ChargingProfileType;
+}
+
+interface StatusInfoType {
+  reasonCode: string;
+  additionalInfo?: string;
+}
+
+interface SetChargingProfileResponse {
+  status: string;
+  statusInfo?: StatusInfoType;
+}
+
+// Example function to create a SetChargingProfileRequest
+function createSetChargingProfileRequest(evseId: number, chargingProfile: ChargingProfileType): SetChargingProfileRequest {
+  return {
+    evseId,
+    chargingProfile
+  };
+}
+
+// Example function to handle SetChargingProfileResponse
+function handleSetChargingProfileResponse(response: SetChargingProfileResponse) {
+  if (response.status === "Accepted") {
+    console.log("Charging profile set successfully.");
+  } else {
+    console.error(`Failed to set charging profile: ${response.statusInfo?.reasonCode} - ${response.statusInfo?.additionalInfo}`);
+  }
+}
+
+// Example usage
+const chargingProfile: ChargingProfileType = {
+  id: 1,
+  stackLevel: 0,
+  chargingProfilePurpose: "TxProfile",
+  chargingProfileKind: "Absolute",
+  validFrom: "2023-07-24T00:00:00Z",
+  validTo: "2023-07-24T23:59:59Z",
+  chargingSchedule: [
+    {
+      startSchedule: "2023-07-24T00:00:00Z",
+      chargingRateUnit: "W",
+      chargingSchedulePeriod: [
+        { startPeriod: 0, limit: 10000 },
+        { startPeriod: 3600, limit: 5000 }
+      ]
+    }
+  ]
+};
+
+const request = createSetChargingProfileRequest(1, chargingProfile);
+
+// Simulate sending the request and receiving a response
+const simulatedResponse: SetChargingProfileResponse = {
+  status: "Accepted"
+};
+
+handleSetChargingProfileResponse(simulatedResponse);
