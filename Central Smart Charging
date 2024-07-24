@@ -1,0 +1,156 @@
+// Import necessary modules
+import WebSocket from 'ws';
+
+// Define Enums
+enum ChargingProfileKindEnumType {
+    Absolute = 'Absolute',
+    Recurring = 'Recurring',
+    Relative = 'Relative'
+}
+
+enum ChargingProfilePurposeEnumType {
+    ChargePointMaxProfile = 'ChargePointMaxProfile',
+    TxDefaultProfile = 'TxDefaultProfile',
+    TxProfile = 'TxProfile'
+}
+
+enum ChargingRateUnitEnumType {
+    Watts = 'W',
+    Amperes = 'A'
+}
+
+// Define Types
+interface ChargingSchedulePeriodType {
+    startPeriod: number;
+    limit: number;
+    numberPhases?: number;
+}
+
+interface ChargingScheduleType {
+    duration?: number;
+    startSchedule?: string;
+    chargingRateUnit: ChargingRateUnitEnumType;
+    chargingSchedulePeriod: ChargingSchedulePeriodType[];
+    minChargingRate?: number;
+}
+
+interface ChargingProfileType {
+    id: number;
+    stackLevel: number;
+    chargingProfilePurpose: ChargingProfilePurposeEnumType;
+    chargingProfileKind: ChargingProfileKindEnumType;
+    recurrencyKind?: string;
+    validFrom?: string;
+    validTo?: string;
+    chargingSchedule: ChargingScheduleType;
+}
+
+interface SetChargingProfileRequest {
+    evseId: number;
+    chargingProfile: ChargingProfileType;
+}
+
+interface SetChargingProfileResponse {
+    status: string;
+    statusInfo?: string;
+}
+
+interface CompositeScheduleType {
+    evseId: number;
+    duration: number;
+    chargingRateUnit: ChargingRateUnitEnumType;
+    scheduleStart: string;
+    chargingSchedulePeriod: ChargingSchedulePeriodType[];
+}
+
+interface GetCompositeScheduleRequest {
+    evseId: number;
+    duration: number;
+    chargingRateUnit?: ChargingRateUnitEnumType;
+}
+
+interface GetCompositeScheduleResponse {
+    status: string;
+    schedule?: CompositeScheduleType;
+    statusInfo?: string;
+}
+
+// Define WebSocket Client
+class ChargingStationClient {
+    private ws: WebSocket;
+
+    constructor(url: string) {
+        this.ws = new WebSocket(url);
+        this.ws.on('open', () => {
+            console.log('Connected to CSMS');
+        });
+        this.ws.on('message', (data: WebSocket.Data) => {
+            console.log('Received:', data);
+        });
+    }
+
+    // Method to set charging profile
+    public setChargingProfile(request: SetChargingProfileRequest): Promise<SetChargingProfileResponse> {
+        return new Promise((resolve, reject) => {
+            this.ws.send(JSON.stringify({ action: 'SetChargingProfile', payload: request }), (err) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    this.ws.once('message', (data: WebSocket.Data) => {
+                        const response: SetChargingProfileResponse = JSON.parse(data.toString());
+                        resolve(response);
+                    });
+                }
+            });
+        });
+    }
+
+    // Method to get composite schedule
+    public getCompositeSchedule(request: GetCompositeScheduleRequest): Promise<GetCompositeScheduleResponse> {
+        return new Promise((resolve, reject) => {
+            this.ws.send(JSON.stringify({ action: 'GetCompositeSchedule', payload: request }), (err) => {
+                if (err) {
+                    reject(err);
+                } else {
+                    this.ws.once('message', (data: WebSocket.Data) => {
+                        const response: GetCompositeScheduleResponse = JSON.parse(data.toString());
+                        resolve(response);
+                    });
+                }
+            });
+        });
+    }
+}
+
+// Example Usage
+const client = new ChargingStationClient('ws://localhost:8080');
+
+const setChargingProfileRequest: SetChargingProfileRequest = {
+    evseId: 1,
+    chargingProfile: {
+        id: 1,
+        stackLevel: 0,
+        chargingProfilePurpose: ChargingProfilePurposeEnumType.TxProfile,
+        chargingProfileKind: ChargingProfileKindEnumType.Absolute,
+        chargingSchedule: {
+            chargingRateUnit: ChargingRateUnitEnumType.Watts,
+            chargingSchedulePeriod: [
+                { startPeriod: 0, limit: 2000 },
+                { startPeriod: 3600, limit: 1000 }
+            ]
+        }
+    }
+};
+
+client.setChargingProfile(setChargingProfileRequest)
+    .then(response => console.log('SetChargingProfile Response:', response))
+    .catch(error => console.error('Error:', error));
+
+const getCompositeScheduleRequest: GetCompositeScheduleRequest = {
+    evseId: 1,
+    duration: 7200
+};
+
+client.getCompositeSchedule(getCompositeScheduleRequest)
+    .then(response => console.log('GetCompositeSchedule Response:', response))
+    .catch(error => console.error('Error:', error));
