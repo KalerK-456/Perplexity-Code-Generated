@@ -1,0 +1,58 @@
+// Import necessary types and interfaces
+import { ChargingProfile, ChargingProfilePurposeType, ChargingProfileKindType, ChargingSchedule, ChargingSchedulePeriod } from './ocppTypes';
+
+// Define the local smart charging profile
+const localSmartChargingProfile: ChargingProfile = {
+    chargingProfileId: 1,
+    transactionId: null,
+    stackLevel: 0,
+    chargingProfilePurpose: ChargingProfilePurposeType.TxDefaultProfile,
+    chargingProfileKind: ChargingProfileKindType.Absolute,
+    recurrencyKind: null,
+    validFrom: new Date(),
+    validTo: null,
+    chargingSchedule: {
+        duration: null,
+        startSchedule: new Date(),
+        chargingRateUnit: "W", // or "A" for Amperes
+        chargingSchedulePeriod: [
+            {
+                startPeriod: 0,
+                limit: 22000, // 22 kW limit
+                numberPhases: 3
+            }
+        ],
+        minChargingRate: null
+    }
+};
+
+// Function to set the local smart charging profile
+async function setLocalSmartChargingProfile(stationId: string, profile: ChargingProfile): Promise<void> {
+    // Simulate sending the profile to the charging station
+    console.log(`Setting local smart charging profile for station ${stationId}`);
+    // Here you would typically send the profile to the station via an API call
+    // For example:
+    // await api.setChargingProfile(stationId, profile);
+}
+
+// Function to handle the response from the charging station
+function handleSetChargingProfileResponse(response: any): void {
+    if (response.status === 'Accepted') {
+        console.log('Charging profile set successfully.');
+    } else {
+        console.error('Failed to set charging profile:', response.status);
+    }
+}
+
+// Example usage
+const stationId = 'station123';
+setLocalSmartChargingProfile(stationId, localSmartChargingProfile)
+    .then(() => {
+        console.log('Profile set request sent.');
+        // Simulate receiving a response
+        const response = { status: 'Accepted' }; // This would come from the charging station
+        handleSetChargingProfileResponse(response);
+    })
+    .catch(error => {
+        console.error('Error setting charging profile:', error);
+    });
